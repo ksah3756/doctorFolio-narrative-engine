@@ -1,0 +1,24 @@
+[data_center.hyperscaler]
+count = { center = 5, uncertainty = 0.5, distribution = "lognormal" }
+ai_capex_per_year_usd = { center = 80e9, uncertainty = 20e9, distribution = "lognormal" }
+nvda_addressable_share = { center = 0.60, uncertainty = 0.10, distribution = "beta" }
+
+[data_center.enterprise]
+total_market_usd = { center = 50e9, uncertainty = 15e9, distribution = "lognormal" }
+nvda_share = { center = 0.30, uncertainty = 0.08, distribution = "beta" }
+
+[gaming]
+pc_gamers_millions = { center = 1500, uncertainty = 100, distribution = "lognormal" }
+upgrade_cycle_years = { center = 3.5, uncertainty = 0.5, distribution = "lognormal" }
+asp_usd = { center = 450, uncertainty = 50, distribution = "lognormal" }
+nvda_share = { center = 0.80, uncertainty = 0.05, distribution = "beta" }
+
+[pro_viz]
+workstation_market_usd = { center = 12e9, uncertainty = 3e9, distribution = "lognormal" }
+nvda_share = { center = 0.75, uncertainty = 0.08, distribution = "beta" }
+
+[auto]
+vehicles_millions = { center = 18, uncertainty = 4, distribution = "lognormal" }
+chip_content_per_vehicle_usd = { center = 1200, uncertainty = 250, distribution = "lognormal" }
+nvda_share = { center = 0.45, uncertainty = 0.10, distribution = "beta" }
+

@@ -1,0 +1,37 @@
+[project]
+name = "dcf-narrative-engine"
+version = "0.1.0"
+description = "Narrative-driven DCF valuation engine for mapping qualitative claims to valuation input distributions."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "numpy>=2.0",
+    "pydantic>=2.7",
+    "scipy>=1.13",
+    "tomli; python_version < '3.11'",
+]
+
+[project.optional-dependencies]
+dev = [
+    "hypothesis>=6.0",
+    "mypy>=1.10",
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+    "ruff>=0.5.0",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "N", "SIM"]
+
+[tool.mypy]
+strict = true
+python_version = "3.12"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--cov=src/dcf_engine --cov-report=term-missing --cov-fail-under=80"
+
