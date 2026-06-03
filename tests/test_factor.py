@@ -2,7 +2,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from dcf_engine.claim import Claim, ExtractionQuality, SourceRef
+from dcf_engine.claim import Claim, ClaimNature, ExtractionQuality, SourceRef
 from dcf_engine.factor import decay_weight, factor_uncertainty
 
 
@@ -27,7 +27,7 @@ def test_factor_uncertainty_uses_decay_weighted_effective_n_and_stress_extra() -
     assert stress > normal * 2
 
 
-def _claim(nature: str) -> Claim:
+def _claim(nature: ClaimNature) -> Claim:
     return Claim(
         claim_id=f"claim-{nature}",
         claim_text="Data center revenue increased.",

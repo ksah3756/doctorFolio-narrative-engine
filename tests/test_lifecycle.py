@@ -18,7 +18,12 @@ def test_classifies_nvda_as_growth_and_uses_sales_to_capital() -> None:
     assert stage == "growth"
     assert valuation_mode_for_stage(stage) == "hybrid"
     assert REINVESTMENT_TOOL_BY_STAGE[stage] == "sales_to_capital"
-    assert compute_reinvestment(stage, delta_revenue=10.0, nopat=20.0, growth=0.25, tool_value=2.5) == 4.0
+    assert (
+        compute_reinvestment(
+            stage, delta_revenue=10.0, nopat=20.0, growth=0.25, tool_value=2.5
+        )
+        == 4.0
+    )
 
 
 def test_mature_stage_uses_roic_reinvestment() -> None:
@@ -35,4 +40,9 @@ def test_mature_stage_uses_roic_reinvestment() -> None:
     stage = classify_lifecycle(company)
 
     assert stage == "mature"
-    assert compute_reinvestment(stage, delta_revenue=1.0, nopat=100.0, growth=0.05, tool_value=0.20) == 25.0
+    assert (
+        compute_reinvestment(
+            stage, delta_revenue=1.0, nopat=100.0, growth=0.05, tool_value=0.20
+        )
+        == 25.0
+    )

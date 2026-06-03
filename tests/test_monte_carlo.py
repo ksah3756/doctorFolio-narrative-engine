@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 
 from dcf_engine.assumption import AssumptionState, ScaleSpec
+from dcf_engine.distributions import DistributionFamily
 from dcf_engine.factor import FactorState
 from dcf_engine.monte_carlo import MonteCarloConfig, mc_iteration_with_validation, mc_run
 
@@ -39,7 +40,7 @@ def test_mc_run_is_seed_deterministic_and_tracks_reject_rate() -> None:
     np.testing.assert_allclose(one.samples["REVENUE_CAGR"], two.samples["REVENUE_CAGR"])
 
 
-def _assumption(name: str, mu: float, sigma: float, family: str) -> AssumptionState:
+def _assumption(name: str, mu: float, sigma: float, family: DistributionFamily) -> AssumptionState:
     return AssumptionState(
         name=name,
         distribution_family=family,

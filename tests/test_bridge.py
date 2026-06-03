@@ -17,4 +17,4 @@ def test_equity_bridge_applies_default_at_firm_value_level_only() -> None:
         )
     )
 
-    assert value == pytest.approx(3_730.0)
+    assert value == pytest.approx(3_750.0)

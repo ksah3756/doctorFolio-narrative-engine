@@ -1,7 +1,7 @@
 from datetime import date
 
 from dcf_engine.assumption import AssumptionState, ScaleSpec
-from dcf_engine.claim import Claim, ExtractionQuality, SourceRef
+from dcf_engine.claim import Claim, ClaimDirection, ClaimSubject, ExtractionQuality, SourceRef
 from dcf_engine.loading import apply_factor_loadings, apply_mean_reversion
 from dcf_engine.routing import route_claims_to_factors
 
@@ -24,7 +24,9 @@ def test_loading_shifts_revenue_up_and_margin_down_from_shared_factors() -> None
     revenue = _assumption("REVENUE_CAGR", 0.22, 0.08)
     margin = _assumption("OPERATING_MARGIN", 0.56, 0.08)
 
-    shifted = apply_factor_loadings([revenue, margin], factors, stage="growth", company=_company(), t_year=1.0)
+    shifted = apply_factor_loadings(
+        [revenue, margin], factors, stage="growth", company=_company(), t_year=1.0
+    )
 
     assert shifted["REVENUE_CAGR"].current_mu > revenue.current_mu
     assert shifted["OPERATING_MARGIN"].current_mu < margin.current_mu
@@ -38,7 +40,7 @@ def test_sales_to_capital_reversion_floor_uses_roic_equals_wacc_relation() -> No
     assert reverted > asm.current_mu
 
 
-def _claim(subject: str, direction: str) -> Claim:
+def _claim(subject: ClaimSubject, direction: ClaimDirection) -> Claim:
     return Claim(
         claim_id=f"{subject}-{direction}",
         claim_text="NVDA narrative claim.",
