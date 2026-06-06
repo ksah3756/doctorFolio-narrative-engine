@@ -1,0 +1,6 @@
+# source_filing: NVIDIA Form 10-Q, accession 0001045810-26-000052
+# source_url: https://www.sec.gov/Archives/edgar/data/1045810/000104581026000052/nvda-20260426.htm
+# source_page: 26
+# period: quarter ended April 26, 2026
+
+Concentration of Revenue. We refer to customers who purchase products directly from NVIDIA as direct customers, such as AIBs, distributors, ODMs, OEMs, CSPs, AI model makers, and system integrators. Certain direct customers may use either internal resources or third-party system integrators to complete their build. We refer to indirect customers as those who purchase products through our direct customers; indirect customers include CSPs, AI Clouds, AI model makers, enterprises, and public sector entities. Our revenue is concentrated among a limited number of direct and indirect customers and this trend may continue. For the first quarter of fiscal year 2027, three direct customers represented 21%, 17%, and 16% of total revenue, all primarily attributable to the Compute & Networking segment.

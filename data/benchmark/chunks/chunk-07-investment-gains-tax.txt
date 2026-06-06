@@ -1,0 +1,6 @@
+# source_filing: NVIDIA Form 10-Q, accession 0001045810-26-000052
+# source_url: https://www.sec.gov/Archives/edgar/data/1045810/000104581026000052/nvda-20260426.htm
+# source_page: 27
+# period: quarter ended April 26, 2026
+
+Total Other Income, Net. Interest income was $540 million for the first quarter of fiscal year 2027 compared with $515 million for the first quarter of fiscal year 2026. Interest expense was $102 million compared with $63 million. Other income was $15.929 billion compared with other expense of $180 million. Total other income, net, was $16.367 billion compared with $272 million. Total other income, net primarily consists of realized or unrealized gains and losses from investments in non-marketable securities and publicly-held equity securities. The change in Other income (expense), net compared to the first quarter of fiscal year 2026 was primarily driven by unrealized gains on investments in publicly-held equity securities of $13.4 billion and non-marketable equity securities of $2.6 billion. Income tax expense was $11.6 billion and $3.1 billion for the first quarter of fiscal years 2027 and 2026, respectively.

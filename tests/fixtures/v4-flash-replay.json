@@ -1,0 +1,221 @@
+{
+  "schema_version": 1,
+  "captured_at": "2026-06-06T00:00:00Z",
+  "model": "deepseek-v4-flash",
+  "pricing_snapshot": {
+    "input_cache_miss_per_1m_tokens_usd": 0.14,
+    "output_per_1m_tokens_usd": 0.28
+  },
+  "responses": [
+    {
+      "chunk_id": "chunk-01-revenue-overview",
+      "latency_ms": 410,
+      "usage": {"prompt_tokens": 520, "completion_tokens": 126},
+      "claims": [
+        {
+          "claim_id": "actual-01-01",
+          "claim_text": "Compute & Networking revenue increased 88% year over year to $74.550 billion in the first quarter of fiscal year 2027.",
+          "claim_subject": "DEMAND_SIGNAL",
+          "claim_nature": "REALIZED",
+          "direction": "INCREASE",
+          "magnitude_qualifier": "EXTREME",
+          "macro_variable": null,
+          "instrument_type": null,
+          "extraction_quality": {"verbatim_overlap": 0.95, "numeric_consistency": true, "temporal_consistency": true, "entity_consistency": true},
+          "source_ref": {"discovery_channel": "edgar_api", "content_source": "10-Q", "source_reliability": 0.95},
+          "chunk_ref": "chunk-01-revenue-overview",
+          "published_date": "2026-05-20"
+        }
+      ]
+    },
+    {
+      "chunk_id": "chunk-02-data-center-demand",
+      "latency_ms": 436,
+      "usage": {"prompt_tokens": 548, "completion_tokens": 122},
+      "claims": [
+        {
+          "claim_id": "actual-02-01",
+          "claim_text": "Compute & Networking revenue growth was driven by Data Center products, Blackwell systems, and demand for InfiniBand, Spectrum-X Ethernet, and NVLink solutions.",
+          "claim_subject": "DEMAND_SIGNAL",
+          "claim_nature": "REALIZED",
+          "direction": "INCREASE",
+          "magnitude_qualifier": "STRONG",
+          "macro_variable": null,
+          "instrument_type": null,
+          "extraction_quality": {"verbatim_overlap": 0.95, "numeric_consistency": true, "temporal_consistency": true, "entity_consistency": true},
+          "source_ref": {"discovery_channel": "edgar_api", "content_source": "10-Q", "source_reliability": 0.95},
+          "chunk_ref": "chunk-02-data-center-demand",
+          "published_date": "2026-05-20"
+        }
+      ]
+    },
+    {
+      "chunk_id": "chunk-03-customer-concentration",
+      "latency_ms": 398,
+      "usage": {"prompt_tokens": 508, "completion_tokens": 112},
+      "claims": [
+        {
+          "claim_id": "actual-03-01",
+          "claim_text": "NVIDIA revenue is concentrated among a limited number of direct and indirect customers, and the trend may continue.",
+          "claim_subject": "MARKET_STRUCTURE",
+          "claim_nature": "RISK_FLAG",
+          "direction": "INCREASE",
+          "magnitude_qualifier": "MODERATE",
+          "macro_variable": null,
+          "instrument_type": null,
+          "extraction_quality": {"verbatim_overlap": 0.94, "numeric_consistency": true, "temporal_consistency": true, "entity_consistency": true},
+          "source_ref": {"discovery_channel": "edgar_api", "content_source": "10-Q", "source_reliability": 0.95},
+          "chunk_ref": "chunk-03-customer-concentration",
+          "published_date": "2026-05-20"
+        }
+      ]
+    },
+    {
+      "chunk_id": "chunk-04-geographic-mix",
+      "latency_ms": 421,
+      "usage": {"prompt_tokens": 538, "completion_tokens": 116},
+      "claims": [
+        {
+          "claim_id": "actual-04-01",
+          "claim_text": "Revenue from customers headquartered outside the United States decreased from 42% of total revenue to 22%.",
+          "claim_subject": "MARKET_STRUCTURE",
+          "claim_nature": "REALIZED",
+          "direction": "DECREASE",
+          "magnitude_qualifier": "STRONG",
+          "macro_variable": null,
+          "instrument_type": null,
+          "extraction_quality": {"verbatim_overlap": 0.95, "numeric_consistency": true, "temporal_consistency": true, "entity_consistency": true},
+          "source_ref": {"discovery_channel": "edgar_api", "content_source": "10-Q", "source_reliability": 0.95},
+          "chunk_ref": "chunk-04-geographic-mix",
+          "published_date": "2026-05-20"
+        }
+      ]
+    },
+    {
+      "chunk_id": "chunk-05-gross-margin",
+      "latency_ms": 388,
+      "usage": {"prompt_tokens": 534, "completion_tokens": 118},
+      "claims": [
+        {
+          "claim_id": "actual-05-01",
+          "claim_text": "Gross margin increased to 74.9% from 60.5%, primarily due to the prior year's H20 excess inventory and purchase obligation charge.",
+          "claim_subject": "COST_SIGNAL",
+          "claim_nature": "REALIZED",
+          "direction": "DECREASE",
+          "magnitude_qualifier": "STRONG",
+          "macro_variable": null,
+          "instrument_type": null,
+          "extraction_quality": {"verbatim_overlap": 0.95, "numeric_consistency": true, "temporal_consistency": true, "entity_consistency": true},
+          "source_ref": {"discovery_channel": "edgar_api", "content_source": "10-Q", "source_reliability": 0.95},
+          "chunk_ref": "chunk-05-gross-margin",
+          "published_date": "2026-05-20"
+        }
+      ]
+    },
+    {
+      "chunk_id": "chunk-06-operating-expenses",
+      "latency_ms": 432,
+      "usage": {"prompt_tokens": 549, "completion_tokens": 118},
+      "claims": [
+        {
+          "claim_id": "actual-06-01",
+          "claim_text": "Total operating expenses increased 52% year over year, driven by compute infrastructure, compensation, and engineering development materials.",
+          "claim_subject": "COST_SIGNAL",
+          "claim_nature": "REALIZED",
+          "direction": "INCREASE",
+          "magnitude_qualifier": "STRONG",
+          "macro_variable": null,
+          "instrument_type": null,
+          "extraction_quality": {"verbatim_overlap": 0.95, "numeric_consistency": true, "temporal_consistency": true, "entity_consistency": true},
+          "source_ref": {"discovery_channel": "edgar_api", "content_source": "10-Q", "source_reliability": 0.95},
+          "chunk_ref": "chunk-06-operating-expenses",
+          "published_date": "2026-05-20"
+        }
+      ]
+    },
+    {
+      "chunk_id": "chunk-07-investment-gains-tax",
+      "latency_ms": 405,
+      "usage": {"prompt_tokens": 546, "completion_tokens": 119},
+      "claims": [
+        {
+          "claim_id": "actual-07-01",
+          "claim_text": "Other income increased sharply due to unrealized gains on publicly-held and non-marketable equity securities.",
+          "claim_subject": "FINANCIAL_HEALTH",
+          "claim_nature": "REALIZED",
+          "direction": "INCREASE",
+          "magnitude_qualifier": "EXTREME",
+          "macro_variable": null,
+          "instrument_type": null,
+          "extraction_quality": {"verbatim_overlap": 0.93, "numeric_consistency": true, "temporal_consistency": true, "entity_consistency": true},
+          "source_ref": {"discovery_channel": "edgar_api", "content_source": "10-Q", "source_reliability": 0.95},
+          "chunk_ref": "chunk-07-investment-gains-tax",
+          "published_date": "2026-05-20"
+        }
+      ]
+    },
+    {
+      "chunk_id": "chunk-08-capital-return",
+      "latency_ms": 440,
+      "usage": {"prompt_tokens": 555, "completion_tokens": 121},
+      "claims": [
+        {
+          "claim_id": "actual-08-01",
+          "claim_text": "NVIDIA repurchased $20.2 billion of common stock and approved an additional $80.0 billion share repurchase authorization.",
+          "claim_subject": "CAPITAL_ALLOCATION",
+          "claim_nature": "REALIZED",
+          "direction": "INCREASE",
+          "magnitude_qualifier": "EXTREME",
+          "macro_variable": null,
+          "instrument_type": null,
+          "extraction_quality": {"verbatim_overlap": 0.95, "numeric_consistency": true, "temporal_consistency": true, "entity_consistency": true},
+          "source_ref": {"discovery_channel": "edgar_api", "content_source": "10-Q", "source_reliability": 0.95},
+          "chunk_ref": "chunk-08-capital-return",
+          "published_date": "2026-05-20"
+        }
+      ]
+    },
+    {
+      "chunk_id": "chunk-09-h200-china-licenses",
+      "latency_ms": 417,
+      "usage": {"prompt_tokens": 541, "completion_tokens": 120},
+      "claims": [
+        {
+          "claim_id": "actual-09-01",
+          "claim_text": "NVIDIA has not generated revenue under the H200 China licensing program and H200 shipments would be subject to a 25% tariff.",
+          "claim_subject": "COST_SIGNAL",
+          "claim_nature": "RISK_FLAG",
+          "direction": "INCREASE",
+          "magnitude_qualifier": "MODERATE",
+          "macro_variable": null,
+          "instrument_type": null,
+          "extraction_quality": {"verbatim_overlap": 0.95, "numeric_consistency": true, "temporal_consistency": true, "entity_consistency": true},
+          "source_ref": {"discovery_channel": "edgar_api", "content_source": "10-Q", "source_reliability": 0.95},
+          "chunk_ref": "chunk-09-h200-china-licenses",
+          "published_date": "2026-05-20"
+        }
+      ]
+    },
+    {
+      "chunk_id": "chunk-10-export-controls-risk",
+      "latency_ms": 462,
+      "usage": {"prompt_tokens": 560, "completion_tokens": 124},
+      "claims": [
+        {
+          "claim_id": "actual-10-01",
+          "claim_text": "Export controls effectively foreclosed NVIDIA from competing in China's data center computing market, helping competitors build larger ecosystems.",
+          "claim_subject": "COMPETITIVE_POSITION",
+          "claim_nature": "RISK_FLAG",
+          "direction": "DECREASE",
+          "magnitude_qualifier": "STRONG",
+          "macro_variable": null,
+          "instrument_type": null,
+          "extraction_quality": {"verbatim_overlap": 0.95, "numeric_consistency": true, "temporal_consistency": true, "entity_consistency": true},
+          "source_ref": {"discovery_channel": "edgar_api", "content_source": "10-Q", "source_reliability": 0.95},
+          "chunk_ref": "chunk-10-export-controls-risk",
+          "published_date": "2026-05-20"
+        }
+      ]
+    }
+  ]
+}
