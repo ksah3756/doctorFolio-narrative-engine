@@ -71,10 +71,10 @@ def test_nvda_spike_pairs_tam_with_accepted_mc_indices(
 
 
 def test_spike_valuation_approximations_are_named_and_documented() -> None:
-    assert nvda_spike.NVDA_SPIKE_TERMINAL_MARGIN_FLOOR == pytest.approx(0.05)
-    assert nvda_spike.NVDA_SPIKE_FCFF_TERMINAL_MULTIPLE == pytest.approx(1.70)
-    assert nvda_spike.NVDA_SPIKE_TERMINAL_GROWTH == pytest.approx(0.035)
-    assert nvda_spike.NVDA_SPIKE_DISCOUNT_SPREAD_FLOOR == pytest.approx(0.025)
+    assert pytest.approx(0.05) == nvda_spike.NVDA_SPIKE_TERMINAL_MARGIN_FLOOR
+    assert pytest.approx(1.70) == nvda_spike.NVDA_SPIKE_FCFF_TERMINAL_MULTIPLE
+    assert pytest.approx(0.035) == nvda_spike.NVDA_SPIKE_TERMINAL_GROWTH
+    assert pytest.approx(0.025) == nvda_spike.NVDA_SPIKE_DISCOUNT_SPREAD_FLOOR
 
     text = Path("docs/nvda-spike-report.md").read_text()
     assert "spike-only Gordon proxy" in text

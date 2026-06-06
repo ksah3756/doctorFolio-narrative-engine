@@ -13,7 +13,7 @@ uv run python -m dcf_engine.nvda_spike
 Example output:
 
 ```text
-NVDA spike fair value median: 4.13T USD
-P10/P90 band: 2.50T / 7.90T USD
+NVDA spike fair value median: 4.05T USD
+P10/P90 band: 2.53T / 7.78T USD
 reject_rate: 0.00%
 ```

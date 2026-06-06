@@ -14,7 +14,7 @@ from dcf_engine.assumption import AssumptionState
 from dcf_engine.distributions import params_from_moments, sample_distribution
 from dcf_engine.factor import FactorState, Regime
 from dcf_engine.lifecycle import LifecycleStage
-from dcf_engine.loading import apply_constraints
+from dcf_engine.loading import LOADING, apply_constraints
 from dcf_engine.validation import passes_imputed_roic_check
 
 
@@ -31,6 +31,7 @@ class MonteCarloConfig:
 class MonteCarloResult:
     samples: dict[str, np.ndarray]
     reject_rate: float
+    accepted_indices: np.ndarray
 
 
 def mc_iteration_with_validation(
@@ -67,8 +68,9 @@ def mc_run(
 ) -> MonteCarloResult:
     rng = np.random.default_rng(config.seed)
     accepted: list[dict[str, float]] = []
+    accepted_indices: list[int] = []
     dropped = 0
-    for _ in range(config.iterations):
+    for index in range(config.iterations):
         # 비현실적인 재무 조합은 버려 reject_rate를 calibration 신호로 남긴다.
         sampled = _iteration_with_rng(
             factor_states=factor_states,
@@ -83,6 +85,7 @@ def mc_run(
             dropped += 1
         else:
             accepted.append(sampled)
+            accepted_indices.append(index)
     reject_rate = dropped / config.iterations
     if reject_rate > 0.30:
         warnings.warn(
@@ -90,7 +93,11 @@ def mc_run(
             RuntimeWarning,
             stacklevel=2,
         )
-    return MonteCarloResult(samples=_transpose_samples(accepted), reject_rate=reject_rate)
+    return MonteCarloResult(
+        samples=_transpose_samples(accepted),
+        reject_rate=reject_rate,
+        accepted_indices=np.array(accepted_indices, dtype=int),
+    )
 
 
 def mc_iteration(
@@ -160,19 +167,7 @@ def _sample_factors(
 
 
 def _shifted_mu(assumption: AssumptionState, sampled_factors: Mapping[str, float]) -> float:
-    loading = {
-        "REVENUE_CAGR": {"DemandStrength": 0.7, "CompetitiveAdvantage": 0.4, "MacroCondition": 0.2},
-        "OPERATING_MARGIN": {
-            "DemandStrength": 0.2,
-            "CompetitiveAdvantage": 0.5,
-            "OperatingEfficiency": 0.6,
-            "MacroCondition": 0.1,
-        },
-        "SALES_TO_CAPITAL_RATIO": {"OperatingEfficiency": 0.5},
-        "WACC": {"MacroCondition": -0.7},
-        "DEFAULT_PROBABILITY": {"MacroCondition": -0.2},
-        "MARKET_SHARE": {"DemandStrength": 0.1, "CompetitiveAdvantage": 0.8},
-    }.get(assumption.name, {})
+    loading = LOADING.get(assumption.name, {})
     mu_shift = sum(
         loading[name] * sampled_factors[name] for name in loading if name in sampled_factors
     )

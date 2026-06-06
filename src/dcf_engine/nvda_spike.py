@@ -7,7 +7,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
-from typing import cast
+from typing import Final, cast
 
 import numpy as np
 
@@ -25,6 +25,12 @@ from dcf_engine.claim import (
 from dcf_engine.distributions import DistributionFamily
 from dcf_engine.monte_carlo import MonteCarloConfig, mc_run
 from dcf_engine.routing import route_claims_to_factors
+
+NVDA_SPIKE_TERMINAL_MARGIN_FLOOR: Final = 0.05
+# Spike-only Gordon proxy; replace with explicit forecast/terminal DCF in the full engine.
+NVDA_SPIKE_FCFF_TERMINAL_MULTIPLE: Final = 1.70
+NVDA_SPIKE_TERMINAL_GROWTH: Final = 0.035
+NVDA_SPIKE_DISCOUNT_SPREAD_FLOOR: Final = 0.025
 
 
 @dataclass(frozen=True)
@@ -57,9 +63,7 @@ def run_nvda_spike(*, seed: int = 20260603, iterations: int = 1_000) -> NvdaSpik
         company,
         MonteCarloConfig(iterations=iterations, seed=seed),
     )
-    fair_values = _fair_values(
-        tam_samples[: len(mc_result.samples["REVENUE_CAGR"])], mc_result.samples
-    )
+    fair_values = _fair_values(tam_samples[mc_result.accepted_indices], mc_result.samples)
     # 라우팅 부호 의도가 end-to-end 테스트에서 바로 드러나도록 비교값을 함께 반환한다.
     demand_only = route_claims_to_factors([_data_center_growth_claim()], "growth")
     cost_only = route_claims_to_factors([_cost_claim()], "growth")
@@ -149,9 +153,17 @@ def _sample_spec(spec: Mapping[str, float | str], rng: np.random.Generator) -> f
 def _fair_values(tam_samples: np.ndarray, samples: Mapping[str, np.ndarray]) -> np.ndarray:
     # full DCF가 아니라 spike용 bridge이므로 가치 분포가 이어지는 경로를 우선 보존한다.
     revenue = tam_samples * samples["MARKET_SHARE"]
-    terminal_margin = np.maximum(samples["OPERATING_MARGIN"], 0.05)
-    fcff = revenue * terminal_margin * (1 - samples["TAX_RATE"]) * 1.70
-    discount_spread = np.maximum(samples["WACC"] - 0.035, 0.025)
+    terminal_margin = np.maximum(samples["OPERATING_MARGIN"], NVDA_SPIKE_TERMINAL_MARGIN_FLOOR)
+    fcff = (
+        revenue
+        * terminal_margin
+        * (1 - samples["TAX_RATE"])
+        * NVDA_SPIKE_FCFF_TERMINAL_MULTIPLE
+    )
+    discount_spread = np.maximum(
+        samples["WACC"] - NVDA_SPIKE_TERMINAL_GROWTH,
+        NVDA_SPIKE_DISCOUNT_SPREAD_FLOOR,
+    )
     going_concern = fcff / discount_spread
     values = [
         equity_value(

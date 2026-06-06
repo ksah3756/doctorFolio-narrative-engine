@@ -1,10 +1,11 @@
-from datetime import UTC, datetime
 from collections.abc import Mapping
+from datetime import UTC, datetime
 
 import numpy as np
 import pytest
 from numpy.random import Generator
 
+from dcf_engine import monte_carlo as monte_carlo_module
 from dcf_engine.assumption import AssumptionState, ScaleSpec
 from dcf_engine.distributions import DistributionFamily
 from dcf_engine.factor import FactorState, Regime
@@ -16,7 +17,6 @@ from dcf_engine.monte_carlo import (
     mc_iteration_with_validation,
     mc_run,
 )
-from dcf_engine import monte_carlo as monte_carlo_module
 
 
 def test_rejection_sampling_drops_unrealistic_imputed_roic() -> None:
@@ -70,7 +70,15 @@ def test_mc_run_reports_outer_indices_for_accepted_samples(
 
     monkeypatch.setattr(monte_carlo_module, "_iteration_with_rng", fake_iteration_with_rng)
 
-    result = mc_run({}, [_assumption("REVENUE_CAGR", 0.25, 0.03, "normal")], "growth", "normal", _company(), MonteCarloConfig(iterations=3))
+    with pytest.warns(RuntimeWarning, match="High reject rate"):
+        result = mc_run(
+            {},
+            [_assumption("REVENUE_CAGR", 0.25, 0.03, "normal")],
+            "growth",
+            "normal",
+            _company(),
+            MonteCarloConfig(iterations=3),
+        )
 
     assert result.reject_rate == pytest.approx(1 / 3)
     np.testing.assert_array_equal(result.accepted_indices, np.array([1, 2]))
