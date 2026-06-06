@@ -69,6 +69,7 @@ def mc_run(
     accepted: list[dict[str, float]] = []
     dropped = 0
     for _ in range(config.iterations):
+        # 비현실적인 재무 조합은 버려 reject_rate를 calibration 신호로 남긴다.
         sampled = _iteration_with_rng(
             factor_states=factor_states,
             assumptions=assumptions,
@@ -101,6 +102,7 @@ def mc_iteration(
     company: Mapping[str, float],
     rng: Generator,
 ) -> dict[str, float]:
+    # factor를 먼저 흔들어 narrative 불확실성이 assumption 분포로 전달되게 한다.
     sampled_factors = _sample_factors(factor_states, stage, regime, rng)
     out: dict[str, float] = {}
     for assumption in assumptions:

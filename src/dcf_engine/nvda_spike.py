@@ -43,6 +43,7 @@ class NvdaSpikeResult:
 
 def run_nvda_spike(*, seed: int = 20260603, iterations: int = 1_000) -> NvdaSpikeResult:
     rng = np.random.default_rng(seed)
+    # TAM에서 equity value까지 한 번에 검증되는 deterministic 세로 슬라이스로 유지한다.
     tam_samples = np.array([sample_tam_total(rng) for _ in range(iterations)], dtype=float)
     factors = route_claims_to_factors(_nvda_claims(), "growth")
     baseline_factors = route_claims_to_factors([], "growth")
@@ -59,6 +60,7 @@ def run_nvda_spike(*, seed: int = 20260603, iterations: int = 1_000) -> NvdaSpik
     fair_values = _fair_values(
         tam_samples[: len(mc_result.samples["REVENUE_CAGR"])], mc_result.samples
     )
+    # 라우팅 부호 의도가 end-to-end 테스트에서 바로 드러나도록 비교값을 함께 반환한다.
     demand_only = route_claims_to_factors([_data_center_growth_claim()], "growth")
     cost_only = route_claims_to_factors([_cost_claim()], "growth")
     revenue_base = _shift_mu("REVENUE_CAGR", baseline_factors)
@@ -81,6 +83,7 @@ def run_nvda_spike(*, seed: int = 20260603, iterations: int = 1_000) -> NvdaSpik
 
 def sample_tam_total(rng: np.random.Generator) -> float:
     data = _load_multiplicands()
+    # 단일 TAM 상수에 묶지 않고 multiplicand 기반 시장 샘플로 불확실성을 보존한다.
     data_center = _sample_data_center(data.data_center, rng)
     gaming_section = data.gaming
     pro_viz_section = data.pro_viz
@@ -144,6 +147,7 @@ def _sample_spec(spec: Mapping[str, float | str], rng: np.random.Generator) -> f
 
 
 def _fair_values(tam_samples: np.ndarray, samples: Mapping[str, np.ndarray]) -> np.ndarray:
+    # full DCF가 아니라 spike용 bridge이므로 가치 분포가 이어지는 경로를 우선 보존한다.
     revenue = tam_samples * samples["MARKET_SHARE"]
     terminal_margin = np.maximum(samples["OPERATING_MARGIN"], 0.05)
     fcff = revenue * terminal_margin * (1 - samples["TAX_RATE"]) * 1.70
@@ -170,6 +174,7 @@ def _fair_values(tam_samples: np.ndarray, samples: Mapping[str, np.ndarray]) -> 
 
 
 def _assumptions(*, tam_mu: float) -> list[AssumptionState]:
+    # growth 단계 NVDA에서는 ROIC를 비활성화하고 imputed ROIC는 sanity check로만 쓴다.
     return [
         _assumption("TAM", "normal", tam_mu, tam_mu * 0.15, tam_mu, tam_mu * 0.15, False),
         _assumption("MARKET_SHARE", "beta", 0.62, 0.05, 0.62, 0.05, True),
@@ -218,6 +223,7 @@ def _shift_mu(name: str, factors: Mapping[str, object]) -> float:
 
 
 def _nvda_claims() -> list[Claim]:
+    # ingestion/LLM은 제외하고 hardcoded claim으로 엔진 의미론만 검증한다.
     return [
         _data_center_growth_claim(),
         _claim("cost-pressure", "COST_SIGNAL", "INCREASE", "MODERATE", "EXTERNAL"),

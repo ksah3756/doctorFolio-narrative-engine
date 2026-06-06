@@ -62,6 +62,7 @@ def route_claims_to_factors(claims: list[Claim], stage: LifecycleStage) -> dict[
         for factor_name, intensity in _routing_for_claim(claim).items():
             raw = factor_shift(claim, intensity, stage)
             sign_key = 1 if raw >= 0 else -1
+            # 같은 방향 근거는 factor를 보강하되 폭주하지 않도록 점진적으로 감쇄한다.
             saturation = 1 / (1 + same_direction_counts[(factor_name, sign_key)] * 0.3)
             same_direction_counts[(factor_name, sign_key)] += 1
             totals[factor_name] += raw * saturation
@@ -72,6 +73,7 @@ def route_claims_to_factors(claims: list[Claim], stage: LifecycleStage) -> dict[
 
 
 def factor_shift(claim: Claim, routing_intensity: float, stage: LifecycleStage) -> float:
+    # claim은 사실 방향만 담고, valuation 부호와 중요도는 deterministic routing이 책임진다.
     dir_sign = {"INCREASE": 1.0, "DECREASE": -1.0, "NEUTRAL": 0.0}[claim.direction]
     value = (
         MAGNITUDE_TO_SIGMA[claim.magnitude_qualifier]
