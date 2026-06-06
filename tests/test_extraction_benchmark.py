@@ -7,7 +7,6 @@ import pytest
 from dcf_engine.extraction.benchmark import run_benchmark
 from dcf_engine.extraction.evaluator import evaluate_extraction, load_gold_labels
 
-
 ROOT = Path(__file__).resolve().parents[1]
 CHUNKS_DIR = ROOT / "data" / "benchmark" / "chunks"
 GOLD_PATH = ROOT / "data" / "benchmark" / "gold.json"

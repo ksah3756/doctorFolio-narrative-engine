@@ -39,7 +39,7 @@ Before any task is "Done":
 - Models: pydantic v2
 - Testing: pytest + hypothesis (property-based for 분포 역산)
 - Lint/Format: ruff
-- LLM (M2): anthropic SDK (Claude API)
+- LLM (M2): DeepSeek V4 Flash via OpenAI-compatible SDK
 - Graph (M2): neo4j-python-driver
 - Macro Data (M2): FRED API, ECOS API
 
@@ -92,4 +92,3 @@ Reviewer (Claude) 평가 기준:
 5. **Prioritization**:
    - **P1 (Blocker)**: 누락 테스트, verify 실패, 수치 오류.
    - **P2 (Nitpick)**: 선택 개선.
-

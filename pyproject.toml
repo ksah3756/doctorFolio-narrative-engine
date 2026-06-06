@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "numpy>=2.0",
+    "openai>=1.50",
     "pydantic>=2.7",
     "scipy>=1.13",
     "tomli; python_version < '3.11'",
@@ -33,5 +34,7 @@ python_version = "3.12"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "--cov=src/dcf_engine --cov-report=term-missing --cov-fail-under=80"
-
+addopts = "-m 'not live' --cov=src/dcf_engine --cov-report=term-missing --cov-fail-under=80"
+markers = [
+    "live: calls external LLM APIs and requires DEEPSEEK_API_KEY",
+]
