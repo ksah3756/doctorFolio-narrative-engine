@@ -1,13 +1,16 @@
-"""OpenAI-compatible DeepSeek client for Claim extraction."""
+"""LLM clients for Claim extraction."""
 
 from __future__ import annotations
 
 import json
 import os
 import time
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Final
 
+from anthropic import Anthropic
+from anthropic.types import TextBlock
 from openai import OpenAI
 
 from dcf_engine.claim import Claim
@@ -15,6 +18,7 @@ from dcf_engine.extraction.prompt import EXTRACTION_SYSTEM_PROMPT, build_user_pr
 
 DEEPSEEK_BASE_URL: Final = "https://api.deepseek.com"
 DEEPSEEK_MODEL: Final = "deepseek-v4-flash"
+CLAUDE_HAIKU_MODEL: Final = "claude-haiku-4-5-20251001"
 
 
 @dataclass(frozen=True)
@@ -93,6 +97,61 @@ class DeepSeekExtractionClient:
         )
 
 
+class AnthropicExtractionClient:
+    def __init__(
+        self,
+        *,
+        api_key: str | None = None,
+        model: str = CLAUDE_HAIKU_MODEL,
+        max_attempts: int = 3,
+    ) -> None:
+        key = api_key or os.environ.get("ANTHROPIC_API_KEY")
+        if key is None:
+            raise RuntimeError("ANTHROPIC_API_KEY is required for live extraction")
+        if max_attempts < 1:
+            raise ValueError("max_attempts must be positive")
+        self._client = Anthropic(api_key=key)
+        self._model = model
+        self._max_attempts = max_attempts
+
+    def extract_claims(self, *, chunk_id: str, chunk_text: str) -> ExtractionResponse:
+        last_error: Exception | None = None
+        for _attempt in range(self._max_attempts):
+            try:
+                return self._extract_once(chunk_id=chunk_id, chunk_text=chunk_text)
+            except Exception as exc:
+                last_error = exc
+        if last_error is not None:
+            raise last_error
+        raise RuntimeError("unreachable extraction retry state")
+
+    def _extract_once(self, *, chunk_id: str, chunk_text: str) -> ExtractionResponse:
+        started = time.monotonic()
+        response = self._client.messages.create(
+            model=self._model,
+            system=EXTRACTION_SYSTEM_PROMPT,
+            messages=[
+                {
+                    "role": "user",
+                    "content": build_user_prompt(chunk_id=chunk_id, chunk_text=chunk_text),
+                }
+            ],
+            temperature=0,
+            max_tokens=4096,
+        )
+        elapsed_ms = round((time.monotonic() - started) * 1000)
+        claims = _claims_from_content(_anthropic_text(response.content))
+        return ExtractionResponse(
+            chunk_id=chunk_id,
+            claims=claims,
+            usage=TokenUsage(
+                prompt_tokens=response.usage.input_tokens,
+                completion_tokens=response.usage.output_tokens,
+            ),
+            latency_ms=elapsed_ms,
+        )
+
+
 def _claims_from_content(content: str) -> list[Claim]:
     data = json.loads(content)
     if not isinstance(data, dict):
@@ -101,3 +160,10 @@ def _claims_from_content(content: str) -> list[Claim]:
     if not isinstance(claims, list):
         raise ValueError("DeepSeek response must contain a claims list")
     return [Claim.model_validate(claim) for claim in claims]
+
+
+def _anthropic_text(blocks: Sequence[object]) -> str:
+    text = "".join(block.text for block in blocks if isinstance(block, TextBlock))
+    if not text:
+        raise ValueError("Anthropic returned empty content")
+    return text

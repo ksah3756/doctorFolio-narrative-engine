@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from dcf_engine.extraction.benchmark import run_benchmark
+from dcf_engine.extraction.benchmark import ProviderName, run_benchmark
 from dcf_engine.extraction.client import CLAUDE_HAIKU_MODEL
 from dcf_engine.extraction.evaluator import evaluate_extraction, load_gold_labels
 
@@ -95,8 +95,13 @@ def test_evaluator_matches_claims_on_subject_direction_and_magnitude() -> None:
         ("anthropic", "claude-haiku-4-5-20251001"),
     ],
 )
-def test_live_model_meets_quality_bar(provider: str, model: str) -> None:
-    result = run_benchmark(chunks_dir=CHUNKS_DIR, gold_path=GOLD_PATH, provider=provider, model=model)
+def test_live_model_meets_quality_bar(provider: ProviderName, model: str) -> None:
+    result = run_benchmark(
+        chunks_dir=CHUNKS_DIR,
+        gold_path=GOLD_PATH,
+        provider=provider,
+        model=model,
+    )
 
     assert result.schema_validation_rate == 1.0
     assert result.precision >= 0.80

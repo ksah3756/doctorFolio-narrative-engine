@@ -5,6 +5,7 @@ description = "Narrative-driven DCF valuation engine for mapping qualitative cla
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "anthropic>=0.66",
     "numpy>=2.0",
     "openai>=1.50",
     "pydantic>=2.7",
@@ -36,5 +37,5 @@ python_version = "3.12"
 testpaths = ["tests"]
 addopts = "-m 'not live' --cov=src/dcf_engine --cov-report=term-missing --cov-fail-under=80"
 markers = [
-    "live: calls external LLM APIs and requires DEEPSEEK_API_KEY",
+    "live: calls external LLM APIs and requires provider API keys",
 ]
