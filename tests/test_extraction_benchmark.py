@@ -4,7 +4,14 @@ from pathlib import Path
 
 import pytest
 
-from dcf_engine.extraction.benchmark import ProviderName, _schema_validation_rate, run_benchmark
+from dcf_engine.extraction.benchmark import (
+    Pricing,
+    ProviderName,
+    _cost_per_chunk,
+    _latency_ms_p50,
+    _schema_validation_rate,
+    run_benchmark,
+)
 from dcf_engine.extraction.client import (
     CLAUDE_HAIKU_MODEL,
     ExtractionResponse,
@@ -53,17 +60,28 @@ def test_gold_labels_cover_all_benchmark_chunks() -> None:
     assert set(gold.claims_by_chunk) == chunk_ids
 
 
+def test_gold_gross_margin_direction_matches_claim_text() -> None:
+    gold = load_gold_labels(GOLD_PATH)
+
+    claim = gold.claims_by_chunk["chunk-05-gross-margin"][0]
+
+    assert "Gross margin increased" in claim.claim_text
+    assert claim.direction == "INCREASE"
+
+
 def test_evaluator_matches_claims_on_subject_direction_and_magnitude() -> None:
     metrics = evaluate_extraction(
         expected=[
             {
                 "claim_id": "gold-1",
+                "chunk_ref": "chunk-1",
                 "claim_subject": "DEMAND_SIGNAL",
                 "direction": "INCREASE",
                 "magnitude_qualifier": "STRONG",
             },
             {
                 "claim_id": "gold-2",
+                "chunk_ref": "chunk-2",
                 "claim_subject": "COST_SIGNAL",
                 "direction": "INCREASE",
                 "magnitude_qualifier": "MODERATE",
@@ -72,12 +90,14 @@ def test_evaluator_matches_claims_on_subject_direction_and_magnitude() -> None:
         actual=[
             {
                 "claim_id": "actual-1",
+                "chunk_ref": "chunk-1",
                 "claim_subject": "DEMAND_SIGNAL",
                 "direction": "INCREASE",
                 "magnitude_qualifier": "STRONG",
             },
             {
                 "claim_id": "actual-2",
+                "chunk_ref": "chunk-2",
                 "claim_subject": "COST_SIGNAL",
                 "direction": "DECREASE",
                 "magnitude_qualifier": "MODERATE",
@@ -90,6 +110,72 @@ def test_evaluator_matches_claims_on_subject_direction_and_magnitude() -> None:
     assert metrics.false_negatives == 1
     assert metrics.precision == 0.5
     assert metrics.recall == 0.5
+
+
+def test_evaluator_does_not_match_claims_across_chunks() -> None:
+    metrics = evaluate_extraction(
+        expected=[
+            {
+                "claim_id": "gold-7",
+                "chunk_ref": "chunk-7",
+                "claim_subject": "FINANCIAL_HEALTH",
+                "direction": "INCREASE",
+                "magnitude_qualifier": "EXTREME",
+            }
+        ],
+        actual=[
+            {
+                "claim_id": "actual-1",
+                "chunk_ref": "chunk-1",
+                "claim_subject": "FINANCIAL_HEALTH",
+                "direction": "INCREASE",
+                "magnitude_qualifier": "EXTREME",
+            }
+        ],
+    )
+
+    assert metrics.true_positives == 0
+    assert metrics.false_positives == 1
+    assert metrics.false_negatives == 1
+    assert metrics.precision == 0.0
+    assert metrics.recall == 0.0
+
+
+def test_draft_gold_coverage_can_ignore_extra_actual_claims() -> None:
+    metrics = evaluate_extraction(
+        expected=[
+            {
+                "claim_id": "gold-1",
+                "chunk_ref": "chunk-1",
+                "claim_subject": "DEMAND_SIGNAL",
+                "direction": "INCREASE",
+                "magnitude_qualifier": "STRONG",
+            }
+        ],
+        actual=[
+            {
+                "claim_id": "actual-1",
+                "chunk_ref": "chunk-1",
+                "claim_subject": "DEMAND_SIGNAL",
+                "direction": "INCREASE",
+                "magnitude_qualifier": "STRONG",
+            },
+            {
+                "claim_id": "actual-extra",
+                "chunk_ref": "chunk-1",
+                "claim_subject": "FINANCIAL_HEALTH",
+                "direction": "INCREASE",
+                "magnitude_qualifier": "STRONG",
+            },
+        ],
+        penalize_extra_claims=False,
+    )
+
+    assert metrics.true_positives == 1
+    assert metrics.false_positives == 0
+    assert metrics.false_negatives == 0
+    assert metrics.precision == 1.0
+    assert metrics.recall == 1.0
 
 
 def test_claim_parser_accepts_markdown_wrapped_json() -> None:
@@ -151,6 +237,55 @@ def test_schema_validation_rate_counts_invalid_live_responses() -> None:
     ]
 
     assert _schema_validation_rate(responses, {"chunk-1": "text", "chunk-2": "text"}) == 0.5
+
+
+def test_latency_p50_uses_only_schema_valid_responses() -> None:
+    responses = [
+        ExtractionResponse(
+            chunk_id="chunk-1",
+            claims=[],
+            usage=TokenUsage(prompt_tokens=10, completion_tokens=10),
+            latency_ms=0,
+            schema_valid=False,
+            error="ValidationError",
+        ),
+        ExtractionResponse(
+            chunk_id="chunk-2",
+            claims=[],
+            usage=TokenUsage(prompt_tokens=10, completion_tokens=10),
+            latency_ms=100,
+        ),
+        ExtractionResponse(
+            chunk_id="chunk-3",
+            claims=[],
+            usage=TokenUsage(prompt_tokens=10, completion_tokens=10),
+            latency_ms=300,
+        ),
+    ]
+
+    assert _latency_ms_p50(responses) == 200.0
+
+
+def test_cost_per_chunk_uses_schema_valid_chunk_denominator() -> None:
+    responses = [
+        ExtractionResponse(
+            chunk_id="chunk-1",
+            claims=[],
+            usage=TokenUsage(prompt_tokens=100, completion_tokens=100),
+            latency_ms=10,
+            schema_valid=False,
+            error="ValidationError",
+        ),
+        ExtractionResponse(
+            chunk_id="chunk-2",
+            claims=[],
+            usage=TokenUsage(prompt_tokens=100, completion_tokens=100),
+            latency_ms=20,
+        ),
+    ]
+    pricing = Pricing(input_per_1m_tokens_usd=1.0, output_per_1m_tokens_usd=1.0)
+
+    assert _cost_per_chunk(responses, pricing=pricing) == 0.0004
 
 
 @pytest.mark.live
