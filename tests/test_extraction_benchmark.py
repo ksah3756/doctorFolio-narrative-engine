@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from dcf_engine.extraction.benchmark import run_benchmark
+from dcf_engine.extraction.client import CLAUDE_HAIKU_MODEL
 from dcf_engine.extraction.evaluator import evaluate_extraction, load_gold_labels
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -22,6 +23,21 @@ def test_replay_benchmark_meets_quality_bar() -> None:
     assert result.cost_per_chunk_usd <= 0.01
     assert result.chunk_count == 10
     assert result.model == "deepseek-v4-flash"
+
+
+def test_claude_haiku_replay_benchmark_uses_haiku_model_and_pricing() -> None:
+    result = run_benchmark(
+        chunks_dir=CHUNKS_DIR,
+        gold_path=GOLD_PATH,
+        replay_path=REPLAY_PATH,
+        provider="anthropic",
+        model=CLAUDE_HAIKU_MODEL,
+    )
+
+    assert result.model == "claude-haiku-4-5-20251001"
+    assert result.precision == 1.0
+    assert result.recall == 1.0
+    assert result.cost_per_chunk_usd == 0.0011379
 
 
 def test_gold_labels_cover_all_benchmark_chunks() -> None:
@@ -72,8 +88,15 @@ def test_evaluator_matches_claims_on_subject_direction_and_magnitude() -> None:
 
 
 @pytest.mark.live
-def test_v4_flash_meets_quality_bar_live() -> None:
-    result = run_benchmark(chunks_dir=CHUNKS_DIR, gold_path=GOLD_PATH)
+@pytest.mark.parametrize(
+    ("provider", "model"),
+    [
+        ("deepseek", "deepseek-v4-flash"),
+        ("anthropic", "claude-haiku-4-5-20251001"),
+    ],
+)
+def test_live_model_meets_quality_bar(provider: str, model: str) -> None:
+    result = run_benchmark(chunks_dir=CHUNKS_DIR, gold_path=GOLD_PATH, provider=provider, model=model)
 
     assert result.schema_validation_rate == 1.0
     assert result.precision >= 0.80
