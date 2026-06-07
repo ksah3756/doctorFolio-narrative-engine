@@ -13,7 +13,7 @@ from pydantic import BaseModel, ConfigDict
 from dcf_engine.claim import Claim
 
 type ClaimRecord = Claim | Mapping[str, object]
-type ClaimMatchKey = tuple[str, str, str]
+type ClaimMatchKey = tuple[str, str, str, str]
 
 
 class SourceFiling(BaseModel):
@@ -51,7 +51,10 @@ def load_gold_labels(path: Path) -> GoldLabels:
 
 
 def evaluate_extraction(
-    *, expected: Sequence[ClaimRecord], actual: Sequence[ClaimRecord]
+    *,
+    expected: Sequence[ClaimRecord],
+    actual: Sequence[ClaimRecord],
+    penalize_extra_claims: bool = True,
 ) -> EvaluationMetrics:
     expected_counts = _count_keys(expected)
     actual_counts = _count_keys(actual)
@@ -59,14 +62,21 @@ def evaluate_extraction(
     true_positives = sum(
         min(expected_counts.get(key, 0), actual_counts.get(key, 0)) for key in all_keys
     )
-    false_positives = sum(
-        max(actual_counts.get(key, 0) - expected_counts.get(key, 0), 0) for key in all_keys
+    # draft gold는 완전 라벨셋이 아니므로, 발견된 추가 claim을 모델 오류로 단정하지 않는다.
+    false_positives = (
+        sum(max(actual_counts.get(key, 0) - expected_counts.get(key, 0), 0) for key in all_keys)
+        if penalize_extra_claims
+        else 0
     )
     false_negatives = sum(
         max(expected_counts.get(key, 0) - actual_counts.get(key, 0), 0) for key in all_keys
     )
-    precision = _ratio(true_positives, true_positives + false_positives)
     recall = _ratio(true_positives, true_positives + false_negatives)
+    precision = (
+        _ratio(true_positives, true_positives + false_positives)
+        if penalize_extra_claims
+        else recall
+    )
     return EvaluationMetrics(
         true_positives=true_positives,
         false_positives=false_positives,
@@ -93,8 +103,14 @@ def _count_keys(claims: Sequence[ClaimRecord]) -> dict[ClaimMatchKey, int]:
 
 def _claim_key(claim: ClaimRecord) -> ClaimMatchKey:
     if isinstance(claim, Claim):
-        return (claim.claim_subject, claim.direction, claim.magnitude_qualifier)
+        return (
+            claim.chunk_ref,
+            claim.claim_subject,
+            claim.direction,
+            claim.magnitude_qualifier,
+        )
     return (
+        _string_field(claim, "chunk_ref"),
         _string_field(claim, "claim_subject"),
         _string_field(claim, "direction"),
         _string_field(claim, "magnitude_qualifier"),

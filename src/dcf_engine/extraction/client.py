@@ -89,15 +89,27 @@ class DeepSeekExtractionClient:
         content = response.choices[0].message.content
         if content is None:
             raise ValueError(f"DeepSeek returned empty content for {chunk_id}")
-        claims = _claims_from_content(content)
         usage = response.usage
+        token_usage = TokenUsage(
+            prompt_tokens=usage.prompt_tokens if usage is not None else 0,
+            completion_tokens=usage.completion_tokens if usage is not None else 0,
+        )
+        try:
+            claims = _claims_from_content(content)
+        except Exception as exc:
+            # 응답 생성 이후 schema만 실패한 경우에도 실제 사용량/지연은 benchmark에 반영한다.
+            return ExtractionResponse(
+                chunk_id=chunk_id,
+                claims=[],
+                usage=token_usage,
+                latency_ms=elapsed_ms,
+                schema_valid=False,
+                error=f"{type(exc).__name__}: {exc}",
+            )
         return ExtractionResponse(
             chunk_id=chunk_id,
             claims=claims,
-            usage=TokenUsage(
-                prompt_tokens=usage.prompt_tokens if usage is not None else 0,
-                completion_tokens=usage.completion_tokens if usage is not None else 0,
-            ),
+            usage=token_usage,
             latency_ms=elapsed_ms,
         )
 
@@ -146,14 +158,26 @@ class AnthropicExtractionClient:
             max_tokens=4096,
         )
         elapsed_ms = round((time.monotonic() - started) * 1000)
-        claims = _claims_from_content(_anthropic_text(response.content))
+        token_usage = TokenUsage(
+            prompt_tokens=response.usage.input_tokens,
+            completion_tokens=response.usage.output_tokens,
+        )
+        try:
+            claims = _claims_from_content(_anthropic_text(response.content))
+        except Exception as exc:
+            # Claude가 schema 제약만 어긴 경우에도 토큰/지연 실측값은 보존한다.
+            return ExtractionResponse(
+                chunk_id=chunk_id,
+                claims=[],
+                usage=token_usage,
+                latency_ms=elapsed_ms,
+                schema_valid=False,
+                error=f"{type(exc).__name__}: {exc}",
+            )
         return ExtractionResponse(
             chunk_id=chunk_id,
             claims=claims,
-            usage=TokenUsage(
-                prompt_tokens=response.usage.input_tokens,
-                completion_tokens=response.usage.output_tokens,
-            ),
+            usage=token_usage,
             latency_ms=elapsed_ms,
         )
 

@@ -117,11 +117,17 @@ def run_benchmark(
     )
     expected = _flatten(gold.claims_by_chunk.values())
     actual = _flatten(response.claims for response in responses)
-    metrics = evaluate_extraction(expected=expected, actual=actual)
+    metrics = evaluate_extraction(
+        expected=expected,
+        actual=actual,
+        penalize_extra_claims=_penalize_extra_claims(gold.label_status),
+    )
     schema_validation_rate = _schema_validation_rate(responses, chunks)
     # 모델별 단가를 명시적으로 분리해 비용 비교가 provider 변경에 섞이지 않게 한다.
     pricing = _pricing_for_model(selected_model)
     total_cost = sum(_response_cost(response, pricing=pricing) for response in responses)
+    cost_per_chunk = _cost_per_chunk(responses, pricing=pricing)
+    latency_ms_p50 = _latency_ms_p50(responses)
     output_path = _write_result(
         result_dir=results_dir or chunks_dir.parents[0] / "results",
         result=_result_payload(
@@ -132,6 +138,8 @@ def run_benchmark(
             chunk_count=len(chunks),
             schema_validation_rate=schema_validation_rate,
             total_cost=total_cost,
+            cost_per_chunk=cost_per_chunk,
+            latency_ms_p50=latency_ms_p50,
             actual=actual,
         ),
     ) if save_results else None
@@ -144,8 +152,8 @@ def run_benchmark(
         recall=metrics.recall,
         numeric_consistency_rate=numeric_consistency_rate(actual),
         total_cost_usd=total_cost,
-        cost_per_chunk_usd=total_cost / len(chunks),
-        latency_ms_p50=float(median(response.latency_ms for response in responses)),
+        cost_per_chunk_usd=cost_per_chunk,
+        latency_ms_p50=latency_ms_p50,
         result_path=str(output_path) if output_path is not None else None,
     )
 
@@ -236,6 +244,25 @@ def _response_cost(response: ExtractionResponse, *, pricing: Pricing) -> float:
     return input_cost + output_cost
 
 
+def _cost_per_chunk(responses: Iterable[ExtractionResponse], *, pricing: Pricing) -> float:
+    response_list = list(responses)
+    total_cost = sum(_response_cost(response, pricing=pricing) for response in response_list)
+    valid_count = sum(1 for response in response_list if response.schema_valid)
+    denominator = valid_count if valid_count > 0 else len(response_list)
+    return _ratio_float(total_cost, denominator)
+
+
+def _latency_ms_p50(responses: Iterable[ExtractionResponse]) -> float:
+    valid_latencies = [
+        response.latency_ms
+        for response in responses
+        if response.schema_valid and response.latency_ms > 0
+    ]
+    if not valid_latencies:
+        return 0.0
+    return float(median(valid_latencies))
+
+
 def _result_payload(
     *,
     provider: ProviderName,
@@ -245,6 +272,8 @@ def _result_payload(
     chunk_count: int,
     schema_validation_rate: float,
     total_cost: float,
+    cost_per_chunk: float,
+    latency_ms_p50: float,
     actual: list[Claim],
 ) -> dict[str, object]:
     return {
@@ -257,8 +286,11 @@ def _result_payload(
         "recall": metrics.recall,
         "numeric_consistency_rate": numeric_consistency_rate(actual),
         "total_cost_usd": total_cost,
-        "cost_per_chunk_usd": total_cost / chunk_count,
-        "latency_ms_p50": float(median(response.latency_ms for response in responses)),
+        "cost_per_chunk_usd": cost_per_chunk,
+        "latency_ms_p50": latency_ms_p50,
+        "true_positives": metrics.true_positives,
+        "false_positives": metrics.false_positives,
+        "false_negatives": metrics.false_negatives,
         "responses": [
             {
                 "chunk_id": response.chunk_id,
@@ -315,6 +347,17 @@ def _pricing_for_model(model: str) -> Pricing:
 
 def _filename_model(model: str) -> str:
     return model.replace(".", "-").replace("/", "-")
+
+
+def _penalize_extra_claims(label_status: str) -> bool:
+    # 완전 freeze 전 gold는 seed 라벨이라 extra claim을 precision 오류로 볼 수 없다.
+    return "exhaustive" in label_status
+
+
+def _ratio_float(numerator: float, denominator: int) -> float:
+    if denominator == 0:
+        return 0.0
+    return numerator / denominator
 
 
 if __name__ == "__main__":

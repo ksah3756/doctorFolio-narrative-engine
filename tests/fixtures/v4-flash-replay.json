@@ -101,7 +101,7 @@
           "claim_text": "Gross margin increased to 74.9% from 60.5%, primarily due to the prior year's H20 excess inventory and purchase obligation charge.",
           "claim_subject": "COST_SIGNAL",
           "claim_nature": "REALIZED",
-          "direction": "DECREASE",
+          "direction": "INCREASE",
           "magnitude_qualifier": "STRONG",
           "macro_variable": null,
           "instrument_type": null,

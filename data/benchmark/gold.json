@@ -9,7 +9,7 @@
     "period_end": "2026-04-26",
     "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000052/nvda-20260426.htm"
   },
-  "labeling_rule": "Match extraction quality on claim_subject, direction, and magnitude_qualifier. Numeric exactness is reported separately and does not decide precision or recall.",
+  "labeling_rule": "Match seed labels on chunk_ref, claim_subject, direction, and magnitude_qualifier. While label_status is draft, extra model claims are treated as unevaluated rather than false positives. Numeric exactness is reported separately and does not decide coverage.",
   "claims_by_chunk": {
     "chunk-01-revenue-overview": [
       {
@@ -81,7 +81,7 @@
         "claim_text": "Gross margin increased to 74.9% from 60.5%, primarily due to the prior year's H20 excess inventory and purchase obligation charge.",
         "claim_subject": "COST_SIGNAL",
         "claim_nature": "REALIZED",
-        "direction": "DECREASE",
+        "direction": "INCREASE",
         "magnitude_qualifier": "STRONG",
         "macro_variable": null,
         "instrument_type": null,

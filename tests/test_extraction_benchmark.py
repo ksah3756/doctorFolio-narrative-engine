@@ -178,6 +178,28 @@ def test_draft_gold_coverage_can_ignore_extra_actual_claims() -> None:
     assert metrics.recall == 1.0
 
 
+def test_draft_gold_coverage_fails_when_seed_claim_is_missing() -> None:
+    metrics = evaluate_extraction(
+        expected=[
+            {
+                "claim_id": "gold-1",
+                "chunk_ref": "chunk-1",
+                "claim_subject": "DEMAND_SIGNAL",
+                "direction": "INCREASE",
+                "magnitude_qualifier": "STRONG",
+            }
+        ],
+        actual=[],
+        penalize_extra_claims=False,
+    )
+
+    assert metrics.true_positives == 0
+    assert metrics.false_positives == 0
+    assert metrics.false_negatives == 1
+    assert metrics.precision == 0.0
+    assert metrics.recall == 0.0
+
+
 def test_claim_parser_accepts_markdown_wrapped_json() -> None:
     claims = _claims_from_content(
         """
