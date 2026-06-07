@@ -55,6 +55,7 @@ class DeepSeekExtractionClient:
 
     def extract_claims(self, *, chunk_id: str, chunk_text: str) -> ExtractionResponse:
         last_error: Exception | None = None
+        # 외부 LLM 호출은 일시 실패가 흔하므로 같은 입력으로 짧게 재시도한다.
         for _attempt in range(self._max_attempts):
             try:
                 return self._extract_once(chunk_id=chunk_id, chunk_text=chunk_text)
@@ -116,6 +117,7 @@ class AnthropicExtractionClient:
 
     def extract_claims(self, *, chunk_id: str, chunk_text: str) -> ExtractionResponse:
         last_error: Exception | None = None
+        # Anthropic도 동일한 retry 계약을 유지해 provider별 실패 처리를 맞춘다.
         for _attempt in range(self._max_attempts):
             try:
                 return self._extract_once(chunk_id=chunk_id, chunk_text=chunk_text)
@@ -163,6 +165,7 @@ def _claims_from_content(content: str) -> list[Claim]:
 
 
 def _anthropic_text(blocks: Sequence[object]) -> str:
+    # Messages API는 여러 block을 돌려주므로 텍스트 block만 합쳐 JSON 파서에 넘긴다.
     text = "".join(block.text for block in blocks if isinstance(block, TextBlock))
     if not text:
         raise ValueError("Anthropic returned empty content")

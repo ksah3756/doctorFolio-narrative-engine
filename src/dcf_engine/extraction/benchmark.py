@@ -109,6 +109,7 @@ def run_benchmark(
     selected_model = model or _default_model(provider)
     chunks = _load_chunks(chunks_dir)
     gold = load_gold_labels(gold_path)
+    # 기본 CI는 replay를 사용해 외부 API 비용 없이 평가 로직만 검증한다.
     responses = (
         _load_replay(replay_path)
         if replay_path is not None
@@ -118,6 +119,7 @@ def run_benchmark(
     actual = _flatten(response.claims for response in responses)
     metrics = evaluate_extraction(expected=expected, actual=actual)
     schema_validation_rate = _schema_validation_rate(responses, chunks)
+    # 모델별 단가를 명시적으로 분리해 비용 비교가 provider 변경에 섞이지 않게 한다.
     pricing = _pricing_for_model(selected_model)
     total_cost = sum(_response_cost(response, pricing=pricing) for response in responses)
     output_path = _write_result(
@@ -193,6 +195,7 @@ def _load_replay(replay_path: Path) -> list[ExtractionResponse]:
 def _run_live(
     chunks: Mapping[str, str], *, provider: ProviderName, model: str
 ) -> list[ExtractionResponse]:
+    # live 실행만 provider client를 만들고, replay 실행은 네트워크 경계를 지나지 않는다.
     client = _client_for_provider(provider=provider, model=model)
     return [
         client.extract_claims(chunk_id=chunk_id, chunk_text=chunk_text)
@@ -282,6 +285,7 @@ def _default_model(provider: ProviderName) -> str:
 def _client_for_provider(
     *, provider: ProviderName, model: str
 ) -> DeepSeekExtractionClient | AnthropicExtractionClient:
+    # DeepSeek 기본 경로를 유지하면서 Haiku 실험만 provider 옵션으로 분기한다.
     if provider == "deepseek":
         return DeepSeekExtractionClient(model=model)
     return AnthropicExtractionClient(model=model)
