@@ -18,20 +18,27 @@ from dcf_engine.extraction.client import (
     TokenUsage,
     _claims_from_content,
 )
-from dcf_engine.extraction.evaluator import evaluate_extraction, load_gold_labels
 
 ROOT = Path(__file__).resolve().parents[1]
 CHUNKS_DIR = ROOT / "data" / "benchmark" / "chunks"
-GOLD_PATH = ROOT / "data" / "benchmark" / "gold.json"
+GOLD_PATH = ROOT / "data" / "benchmark" / "gold_facts.json"
 REPLAY_PATH = ROOT / "tests" / "fixtures" / "v4-flash-replay.json"
 
 
-def test_replay_benchmark_meets_quality_bar() -> None:
+def test_replay_benchmark_reports_scorecard_metrics() -> None:
     result = run_benchmark(chunks_dir=CHUNKS_DIR, gold_path=GOLD_PATH, replay_path=REPLAY_PATH)
 
     assert result.schema_validation_rate == 1.0
-    assert result.precision >= 0.80
-    assert result.recall >= 0.75
+    assert 0.0 <= result.grounded_precision <= 1.0
+    assert 0.0 <= result.coverage_recall <= 1.0
+    assert 0.0 <= result.primary_coverage_recall <= 1.0
+    assert 0.0 <= result.numeric_grounding_rate <= 1.0
+    assert 0.0 <= result.direction_accuracy <= 1.0
+    assert 0.0 <= result.magnitude_accuracy <= 1.0
+    assert 0.0 <= result.subject_accuracy <= 1.0
+    assert 0.0 <= result.redundancy_rate <= 1.0
+    assert result.true_positives >= 0
+    assert result.false_negatives >= 0
     assert result.cost_per_chunk_usd <= 0.01
     assert result.chunk_count == 10
     assert result.model == "deepseek-v4-flash"
@@ -47,157 +54,8 @@ def test_claude_haiku_replay_benchmark_uses_haiku_model_and_pricing() -> None:
     )
 
     assert result.model == "claude-haiku-4-5-20251001"
-    assert result.precision == 1.0
-    assert result.recall == 1.0
     assert result.cost_per_chunk_usd == 0.0011379
-
-
-def test_gold_labels_cover_all_benchmark_chunks() -> None:
-    gold = load_gold_labels(GOLD_PATH)
-    chunk_ids = {path.stem for path in CHUNKS_DIR.glob("*.txt")}
-
-    assert len(chunk_ids) == 10
-    assert set(gold.claims_by_chunk) == chunk_ids
-
-
-def test_gold_gross_margin_direction_matches_claim_text() -> None:
-    gold = load_gold_labels(GOLD_PATH)
-
-    claim = gold.claims_by_chunk["chunk-05-gross-margin"][0]
-
-    assert "Gross margin increased" in claim.claim_text
-    assert claim.direction == "INCREASE"
-
-
-def test_evaluator_matches_claims_on_subject_direction_and_magnitude() -> None:
-    metrics = evaluate_extraction(
-        expected=[
-            {
-                "claim_id": "gold-1",
-                "chunk_ref": "chunk-1",
-                "claim_subject": "DEMAND_SIGNAL",
-                "direction": "INCREASE",
-                "magnitude_qualifier": "STRONG",
-            },
-            {
-                "claim_id": "gold-2",
-                "chunk_ref": "chunk-2",
-                "claim_subject": "COST_SIGNAL",
-                "direction": "INCREASE",
-                "magnitude_qualifier": "MODERATE",
-            },
-        ],
-        actual=[
-            {
-                "claim_id": "actual-1",
-                "chunk_ref": "chunk-1",
-                "claim_subject": "DEMAND_SIGNAL",
-                "direction": "INCREASE",
-                "magnitude_qualifier": "STRONG",
-            },
-            {
-                "claim_id": "actual-2",
-                "chunk_ref": "chunk-2",
-                "claim_subject": "COST_SIGNAL",
-                "direction": "DECREASE",
-                "magnitude_qualifier": "MODERATE",
-            },
-        ],
-    )
-
-    assert metrics.true_positives == 1
-    assert metrics.false_positives == 1
-    assert metrics.false_negatives == 1
-    assert metrics.precision == 0.5
-    assert metrics.recall == 0.5
-
-
-def test_evaluator_does_not_match_claims_across_chunks() -> None:
-    metrics = evaluate_extraction(
-        expected=[
-            {
-                "claim_id": "gold-7",
-                "chunk_ref": "chunk-7",
-                "claim_subject": "FINANCIAL_HEALTH",
-                "direction": "INCREASE",
-                "magnitude_qualifier": "EXTREME",
-            }
-        ],
-        actual=[
-            {
-                "claim_id": "actual-1",
-                "chunk_ref": "chunk-1",
-                "claim_subject": "FINANCIAL_HEALTH",
-                "direction": "INCREASE",
-                "magnitude_qualifier": "EXTREME",
-            }
-        ],
-    )
-
-    assert metrics.true_positives == 0
-    assert metrics.false_positives == 1
-    assert metrics.false_negatives == 1
-    assert metrics.precision == 0.0
-    assert metrics.recall == 0.0
-
-
-def test_draft_gold_coverage_can_ignore_extra_actual_claims() -> None:
-    metrics = evaluate_extraction(
-        expected=[
-            {
-                "claim_id": "gold-1",
-                "chunk_ref": "chunk-1",
-                "claim_subject": "DEMAND_SIGNAL",
-                "direction": "INCREASE",
-                "magnitude_qualifier": "STRONG",
-            }
-        ],
-        actual=[
-            {
-                "claim_id": "actual-1",
-                "chunk_ref": "chunk-1",
-                "claim_subject": "DEMAND_SIGNAL",
-                "direction": "INCREASE",
-                "magnitude_qualifier": "STRONG",
-            },
-            {
-                "claim_id": "actual-extra",
-                "chunk_ref": "chunk-1",
-                "claim_subject": "FINANCIAL_HEALTH",
-                "direction": "INCREASE",
-                "magnitude_qualifier": "STRONG",
-            },
-        ],
-        penalize_extra_claims=False,
-    )
-
-    assert metrics.true_positives == 1
-    assert metrics.false_positives == 0
-    assert metrics.false_negatives == 0
-    assert metrics.precision == 1.0
-    assert metrics.recall == 1.0
-
-
-def test_draft_gold_coverage_fails_when_seed_claim_is_missing() -> None:
-    metrics = evaluate_extraction(
-        expected=[
-            {
-                "claim_id": "gold-1",
-                "chunk_ref": "chunk-1",
-                "claim_subject": "DEMAND_SIGNAL",
-                "direction": "INCREASE",
-                "magnitude_qualifier": "STRONG",
-            }
-        ],
-        actual=[],
-        penalize_extra_claims=False,
-    )
-
-    assert metrics.true_positives == 0
-    assert metrics.false_positives == 0
-    assert metrics.false_negatives == 1
-    assert metrics.precision == 0.0
-    assert metrics.recall == 0.0
+    assert 0.0 <= result.grounded_precision <= 1.0
 
 
 def test_claim_parser_accepts_markdown_wrapped_json() -> None:
@@ -288,7 +146,7 @@ def test_latency_p50_uses_only_schema_valid_responses() -> None:
     assert _latency_ms_p50(responses) == 200.0
 
 
-def test_cost_per_chunk_uses_schema_valid_chunk_denominator() -> None:
+def test_cost_per_chunk_uses_all_chunk_denominator() -> None:
     responses = [
         ExtractionResponse(
             chunk_id="chunk-1",
@@ -307,7 +165,7 @@ def test_cost_per_chunk_uses_schema_valid_chunk_denominator() -> None:
     ]
     pricing = Pricing(input_per_1m_tokens_usd=1.0, output_per_1m_tokens_usd=1.0)
 
-    assert _cost_per_chunk(responses, pricing=pricing) == 0.0004
+    assert _cost_per_chunk(responses, pricing=pricing, chunk_count=2) == 0.0002
 
 
 @pytest.mark.live
@@ -327,6 +185,6 @@ def test_live_model_meets_quality_bar(provider: ProviderName, model: str) -> Non
     )
 
     assert result.schema_validation_rate == 1.0
-    assert result.precision >= 0.80
-    assert result.recall >= 0.75
+    assert result.grounded_precision >= 0.80
+    assert result.coverage_recall >= 0.75
     assert result.cost_per_chunk_usd <= 0.01

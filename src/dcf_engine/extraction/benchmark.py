@@ -23,12 +23,11 @@ from dcf_engine.extraction.client import (
     TokenUsage,
 )
 from dcf_engine.extraction.evaluator import (
-    EvaluationMetrics,
-    evaluate_extraction,
-    load_gold_labels,
-    numeric_consistency_rate,
+    Scorecard,
     read_json_object,
+    score_extraction,
 )
+from dcf_engine.extraction.gold import load_gold_facts
 from dcf_engine.extraction.prompt import EXTRACTION_PROMPT_VERSION
 
 type ProviderName = Literal["deepseek", "anthropic"]
@@ -45,6 +44,7 @@ MODEL_PRICING: Final[dict[str, Pricing]] = {
     CLAUDE_HAIKU_MODEL: Pricing(input_per_1m_tokens_usd=1.0, output_per_1m_tokens_usd=5.0),
 }
 RESULTS_DIR: Final = Path("data/benchmark/results")
+DEFAULT_GOLD_PATH: Final = Path("data/benchmark/gold_facts.json")
 
 
 class BenchmarkResult(BaseModel):
@@ -54,9 +54,16 @@ class BenchmarkResult(BaseModel):
     prompt_version: str
     chunk_count: int
     schema_validation_rate: float = Field(ge=0.0, le=1.0)
-    precision: float = Field(ge=0.0, le=1.0)
-    recall: float = Field(ge=0.0, le=1.0)
-    numeric_consistency_rate: float = Field(ge=0.0, le=1.0)
+    grounded_precision: float = Field(ge=0.0, le=1.0)
+    coverage_recall: float = Field(ge=0.0, le=1.0)
+    primary_coverage_recall: float = Field(ge=0.0, le=1.0)
+    numeric_grounding_rate: float = Field(ge=0.0, le=1.0)
+    direction_accuracy: float = Field(ge=0.0, le=1.0)
+    magnitude_accuracy: float = Field(ge=0.0, le=1.0)
+    subject_accuracy: float = Field(ge=0.0, le=1.0)
+    redundancy_rate: float = Field(ge=0.0, le=1.0)
+    true_positives: int
+    false_negatives: int
     total_cost_usd: float
     cost_per_chunk_usd: float
     latency_ms_p50: float
@@ -99,7 +106,7 @@ class ReplayFile(BaseModel):
 def run_benchmark(
     *,
     chunks_dir: Path,
-    gold_path: Path,
+    gold_path: Path = DEFAULT_GOLD_PATH,
     replay_path: Path | None = None,
     provider: ProviderName = "deepseek",
     model: str | None = None,
@@ -108,25 +115,19 @@ def run_benchmark(
 ) -> BenchmarkResult:
     selected_model = model or _default_model(provider)
     chunks = _load_chunks(chunks_dir)
-    gold = load_gold_labels(gold_path)
+    gold = load_gold_facts(gold_path)
     # 기본 CI는 replay를 사용해 외부 API 비용 없이 평가 로직만 검증한다.
     responses = (
         _load_replay(replay_path)
         if replay_path is not None
         else _run_live(chunks, provider=provider, model=selected_model)
     )
-    expected = _flatten(gold.claims_by_chunk.values())
-    actual = _flatten(response.claims for response in responses)
-    metrics = evaluate_extraction(
-        expected=expected,
-        actual=actual,
-        penalize_extra_claims=_penalize_extra_claims(gold.label_status),
-    )
+    scorecard = score_extraction(gold=gold, responses=responses, chunk_texts=chunks)
     schema_validation_rate = _schema_validation_rate(responses, chunks)
     # 모델별 단가를 명시적으로 분리해 비용 비교가 provider 변경에 섞이지 않게 한다.
     pricing = _pricing_for_model(selected_model)
     total_cost = sum(_response_cost(response, pricing=pricing) for response in responses)
-    cost_per_chunk = _cost_per_chunk(responses, pricing=pricing)
+    cost_per_chunk = _cost_per_chunk(responses, pricing=pricing, chunk_count=len(chunks))
     latency_ms_p50 = _latency_ms_p50(responses)
     output_path = _write_result(
         result_dir=results_dir or chunks_dir.parents[0] / "results",
@@ -134,13 +135,12 @@ def run_benchmark(
             provider=provider,
             model=selected_model,
             responses=responses,
-            metrics=metrics,
+            scorecard=scorecard,
             chunk_count=len(chunks),
             schema_validation_rate=schema_validation_rate,
             total_cost=total_cost,
             cost_per_chunk=cost_per_chunk,
             latency_ms_p50=latency_ms_p50,
-            actual=actual,
         ),
     ) if save_results else None
     return BenchmarkResult(
@@ -148,9 +148,16 @@ def run_benchmark(
         prompt_version=EXTRACTION_PROMPT_VERSION,
         chunk_count=len(chunks),
         schema_validation_rate=schema_validation_rate,
-        precision=metrics.precision,
-        recall=metrics.recall,
-        numeric_consistency_rate=numeric_consistency_rate(actual),
+        grounded_precision=scorecard.grounded_precision,
+        coverage_recall=scorecard.coverage_recall,
+        primary_coverage_recall=scorecard.primary_coverage_recall,
+        numeric_grounding_rate=scorecard.numeric_grounding_rate,
+        direction_accuracy=scorecard.direction_accuracy,
+        magnitude_accuracy=scorecard.magnitude_accuracy,
+        subject_accuracy=scorecard.subject_accuracy,
+        redundancy_rate=scorecard.redundancy_rate,
+        true_positives=scorecard.true_positives,
+        false_negatives=scorecard.false_negatives,
         total_cost_usd=total_cost,
         cost_per_chunk_usd=cost_per_chunk,
         latency_ms_p50=latency_ms_p50,
@@ -167,7 +174,7 @@ def main() -> None:
     root = Path.cwd()
     result = run_benchmark(
         chunks_dir=root / "data" / "benchmark" / "chunks",
-        gold_path=root / "data" / "benchmark" / "gold.json",
+        gold_path=root / DEFAULT_GOLD_PATH,
         replay_path=args.replay,
         provider=args.provider,
         model=args.model,
@@ -244,12 +251,12 @@ def _response_cost(response: ExtractionResponse, *, pricing: Pricing) -> float:
     return input_cost + output_cost
 
 
-def _cost_per_chunk(responses: Iterable[ExtractionResponse], *, pricing: Pricing) -> float:
+def _cost_per_chunk(
+    responses: Iterable[ExtractionResponse], *, pricing: Pricing, chunk_count: int
+) -> float:
     response_list = list(responses)
     total_cost = sum(_response_cost(response, pricing=pricing) for response in response_list)
-    valid_count = sum(1 for response in response_list if response.schema_valid)
-    denominator = valid_count if valid_count > 0 else len(response_list)
-    return _ratio_float(total_cost, denominator)
+    return _ratio_float(total_cost, chunk_count)
 
 
 def _latency_ms_p50(responses: Iterable[ExtractionResponse]) -> float:
@@ -268,13 +275,12 @@ def _result_payload(
     provider: ProviderName,
     model: str,
     responses: list[ExtractionResponse],
-    metrics: EvaluationMetrics,
+    scorecard: Scorecard,
     chunk_count: int,
     schema_validation_rate: float,
     total_cost: float,
     cost_per_chunk: float,
     latency_ms_p50: float,
-    actual: list[Claim],
 ) -> dict[str, object]:
     return {
         "provider": provider,
@@ -282,15 +288,21 @@ def _result_payload(
         "prompt_version": EXTRACTION_PROMPT_VERSION,
         "chunk_count": chunk_count,
         "schema_validation_rate": schema_validation_rate,
-        "precision": metrics.precision,
-        "recall": metrics.recall,
-        "numeric_consistency_rate": numeric_consistency_rate(actual),
+        "grounded_precision": scorecard.grounded_precision,
+        "coverage_recall": scorecard.coverage_recall,
+        "primary_coverage_recall": scorecard.primary_coverage_recall,
+        "numeric_grounding_rate": scorecard.numeric_grounding_rate,
+        "direction_accuracy": scorecard.direction_accuracy,
+        "magnitude_accuracy": scorecard.magnitude_accuracy,
+        "subject_accuracy": scorecard.subject_accuracy,
+        "redundancy_rate": scorecard.redundancy_rate,
+        "true_positives": scorecard.true_positives,
+        "false_negatives": scorecard.false_negatives,
+        "total_claims": scorecard.total_claims,
+        "grounded_claims": scorecard.grounded_claims,
         "total_cost_usd": total_cost,
         "cost_per_chunk_usd": cost_per_chunk,
         "latency_ms_p50": latency_ms_p50,
-        "true_positives": metrics.true_positives,
-        "false_positives": metrics.false_positives,
-        "false_negatives": metrics.false_negatives,
         "responses": [
             {
                 "chunk_id": response.chunk_id,
@@ -319,10 +331,6 @@ def _write_result(*, result_dir: Path, result: Mapping[str, object]) -> Path:
     return path
 
 
-def _flatten(claim_groups: Iterable[Iterable[Claim]]) -> list[Claim]:
-    return [claim for claims in claim_groups for claim in claims]
-
-
 def _default_model(provider: ProviderName) -> str:
     if provider == "deepseek":
         return DEEPSEEK_MODEL
@@ -347,11 +355,6 @@ def _pricing_for_model(model: str) -> Pricing:
 
 def _filename_model(model: str) -> str:
     return model.replace(".", "-").replace("/", "-")
-
-
-def _penalize_extra_claims(label_status: str) -> bool:
-    # 완전 freeze 전 gold는 seed 라벨이라 extra claim을 precision 오류로 볼 수 없다.
-    return "exhaustive" in label_status
 
 
 def _ratio_float(numerator: float, denominator: int) -> float:

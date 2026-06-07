@@ -42,10 +42,17 @@ def test_normalize_numbers_handles_currency_commas_and_percentages() -> None:
 
 
 def test_match_score_separates_related_and_unrelated_claims() -> None:
+    revenue_evidence = (
+        "Compute & Networking revenue of $74.550 billion compared with $39.589 billion, "
+        "a year-over-year increase of $34.961 billion, or 88%"
+    )
+    revenue_statement = (
+        "Compute & Networking revenue increased 88% year over year to $74.550 billion."
+    )
     fact = _fact(
         fact_id="fact-01-01",
-        evidence_span="Compute & Networking revenue of $74.550 billion compared with $39.589 billion, a year-over-year increase of $34.961 billion, or 88%",
-        canonical_statement="Compute & Networking revenue increased 88% year over year to $74.550 billion.",
+        evidence_span=revenue_evidence,
+        canonical_statement=revenue_statement,
         numeric_facts=[
             NumericFact(metric="revenue", value=74.55, unit="USD_BN", period="current"),
             NumericFact(metric="revenue", value=39.589, unit="USD_BN", period="prior"),
