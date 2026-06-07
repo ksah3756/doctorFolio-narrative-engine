@@ -6,9 +6,11 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
+from dcf_engine.claim import ClaimSubject, MacroVariable
 from dcf_engine.extraction.gold import (
     FactPeriod,
     GoldFact,
+    GoldFactSet,
     MagnitudeBands,
     NumericFact,
     band_for_pct,
@@ -23,15 +25,15 @@ NUMBER_RE = re.compile(r"\$?\b\d[\d,]*(?:\.\d+)?%?")
 
 
 @pytest.fixture(scope="module")
-def gold_facts():
+def gold_facts() -> GoldFactSet:
     return load_gold_facts(GOLD_FACTS_PATH)
 
 
-def test_gold_facts_schema_version_loads(gold_facts) -> None:
+def test_gold_facts_schema_version_loads(gold_facts: GoldFactSet) -> None:
     assert gold_facts.schema_version == 2
 
 
-def test_gold_facts_cover_every_benchmark_chunk(gold_facts) -> None:
+def test_gold_facts_cover_every_benchmark_chunk(gold_facts: GoldFactSet) -> None:
     chunk_ids = {path.stem for path in CHUNKS_DIR.glob("*.txt")}
 
     assert len(chunk_ids) == 10
@@ -39,7 +41,7 @@ def test_gold_facts_cover_every_benchmark_chunk(gold_facts) -> None:
     assert all(gold_facts.facts_by_chunk[chunk_id] for chunk_id in chunk_ids)
 
 
-def test_gold_fact_ids_are_unique_and_chunk_scoped(gold_facts) -> None:
+def test_gold_fact_ids_are_unique_and_chunk_scoped(gold_facts: GoldFactSet) -> None:
     for chunk_id, facts in gold_facts.facts_by_chunk.items():
         chunk_number = chunk_id.split("-")[1]
         fact_ids = [fact.fact_id for fact in facts]
@@ -48,14 +50,14 @@ def test_gold_fact_ids_are_unique_and_chunk_scoped(gold_facts) -> None:
         assert all(fact_id.startswith(f"fact-{chunk_number}-") for fact_id in fact_ids)
 
 
-def test_gold_facts_are_grounded_in_source_chunks(gold_facts) -> None:
+def test_gold_facts_are_grounded_in_source_chunks(gold_facts: GoldFactSet) -> None:
     for chunk_id, facts in gold_facts.facts_by_chunk.items():
         chunk_text = _normalized_body(CHUNKS_DIR / f"{chunk_id}.txt")
         for fact in facts:
             assert _normalize(fact.evidence_span) in chunk_text, fact.fact_id
 
 
-def test_gold_numeric_facts_are_grounded_in_source_chunks(gold_facts) -> None:
+def test_gold_numeric_facts_are_grounded_in_source_chunks(gold_facts: GoldFactSet) -> None:
     for chunk_id, facts in gold_facts.facts_by_chunk.items():
         chunk_numbers = _numbers_in_chunk(CHUNKS_DIR / f"{chunk_id}.txt")
         for fact in facts:
@@ -67,7 +69,9 @@ def test_gold_numeric_facts_are_grounded_in_source_chunks(gold_facts) -> None:
                 )
 
 
-def test_numeric_magnitude_labels_follow_configured_bands(gold_facts) -> None:
+def test_numeric_magnitude_labels_follow_configured_bands(
+    gold_facts: GoldFactSet,
+) -> None:
     for facts in gold_facts.facts_by_chunk.values():
         for fact in facts:
             if fact.magnitude_basis != "numeric":
@@ -83,16 +87,18 @@ def test_numeric_magnitude_labels_follow_configured_bands(gold_facts) -> None:
             )
 
 
-def test_numeric_direction_matches_current_and_prior_values(gold_facts) -> None:
+def test_numeric_direction_matches_current_and_prior_values(
+    gold_facts: GoldFactSet,
+) -> None:
     for facts in gold_facts.facts_by_chunk.values():
         for fact in facts:
             current_values = [
-                numeric_fact.value
+                _direction_value(numeric_fact)
                 for numeric_fact in fact.numeric_facts
                 if numeric_fact.period == "current"
             ]
             prior_values = [
-                numeric_fact.value
+                _direction_value(numeric_fact)
                 for numeric_fact in fact.numeric_facts
                 if numeric_fact.period == "prior"
             ]
@@ -106,7 +112,9 @@ def test_numeric_direction_matches_current_and_prior_values(gold_facts) -> None:
                 assert fact.direction == "NEUTRAL", fact.fact_id
 
 
-def test_gold_facts_keep_multi_label_subjects_for_known_ambiguous_chunks(gold_facts) -> None:
+def test_gold_facts_keep_multi_label_subjects_for_known_ambiguous_chunks(
+    gold_facts: GoldFactSet,
+) -> None:
     assert any(
         len(fact.allowed_subjects) >= 2
         for fact in gold_facts.facts_by_chunk["chunk-01-revenue-overview"]
@@ -142,7 +150,9 @@ def test_macro_variable_is_only_valid_for_macro_exposure() -> None:
         _fact(allowed_subjects=["DEMAND_SIGNAL"], macro_variable="RATE")
 
 
-def _fact(*, allowed_subjects: list[str], macro_variable: str | None) -> GoldFact:
+def _fact(
+    *, allowed_subjects: list[ClaimSubject], macro_variable: MacroVariable | None
+) -> GoldFact:
     return GoldFact(
         fact_id="fact-99-01",
         canonical_statement="Interest rates affected interest income.",
@@ -180,3 +190,9 @@ def _numbers_in_chunk(path: Path) -> set[float]:
 
 def _number_value(value: str) -> float:
     return float(value.strip("$%").replace(",", ""))
+
+
+def _direction_value(numeric_fact: NumericFact) -> float:
+    if numeric_fact.unit == "USD_MN":
+        return numeric_fact.value / 1_000
+    return numeric_fact.value
