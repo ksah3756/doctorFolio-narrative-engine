@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import time
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -19,6 +20,7 @@ from dcf_engine.extraction.prompt import EXTRACTION_SYSTEM_PROMPT, build_user_pr
 DEEPSEEK_BASE_URL: Final = "https://api.deepseek.com"
 DEEPSEEK_MODEL: Final = "deepseek-v4-flash"
 CLAUDE_HAIKU_MODEL: Final = "claude-haiku-4-5-20251001"
+JSON_FENCE_RE: Final = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```", re.DOTALL)
 
 
 @dataclass(frozen=True)
@@ -33,6 +35,8 @@ class ExtractionResponse:
     claims: list[Claim]
     usage: TokenUsage
     latency_ms: int
+    schema_valid: bool = True
+    error: str | None = None
 
 
 class DeepSeekExtractionClient:
@@ -155,13 +159,33 @@ class AnthropicExtractionClient:
 
 
 def _claims_from_content(content: str) -> list[Claim]:
-    data = json.loads(content)
+    data = json.loads(_json_object_text(content))
     if not isinstance(data, dict):
-        raise ValueError("DeepSeek response must be a JSON object")
+        raise ValueError("LLM response must be a JSON object")
     claims = data.get("claims")
     if not isinstance(claims, list):
-        raise ValueError("DeepSeek response must contain a claims list")
+        raise ValueError("LLM response must contain a claims list")
     return [Claim.model_validate(claim) for claim in claims]
+
+
+def _json_object_text(content: str) -> str:
+    stripped = content.strip()
+    if stripped.startswith("{"):
+        return stripped
+    fence_match = JSON_FENCE_RE.search(stripped)
+    if fence_match is not None:
+        return fence_match.group(1)
+    decoder = json.JSONDecoder()
+    for index, character in enumerate(stripped):
+        if character != "{":
+            continue
+        try:
+            _, end = decoder.raw_decode(stripped[index:])
+        except json.JSONDecodeError:
+            continue
+        # Claude가 앞뒤 설명을 붙여도 첫 JSON object만 평가 대상으로 사용한다.
+        return stripped[index : index + end]
+    return stripped
 
 
 def _anthropic_text(blocks: Sequence[object]) -> str:

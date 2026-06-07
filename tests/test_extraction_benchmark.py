@@ -4,8 +4,13 @@ from pathlib import Path
 
 import pytest
 
-from dcf_engine.extraction.benchmark import ProviderName, run_benchmark
-from dcf_engine.extraction.client import CLAUDE_HAIKU_MODEL
+from dcf_engine.extraction.benchmark import ProviderName, _schema_validation_rate, run_benchmark
+from dcf_engine.extraction.client import (
+    CLAUDE_HAIKU_MODEL,
+    ExtractionResponse,
+    TokenUsage,
+    _claims_from_content,
+)
 from dcf_engine.extraction.evaluator import evaluate_extraction, load_gold_labels
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -85,6 +90,67 @@ def test_evaluator_matches_claims_on_subject_direction_and_magnitude() -> None:
     assert metrics.false_negatives == 1
     assert metrics.precision == 0.5
     assert metrics.recall == 0.5
+
+
+def test_claim_parser_accepts_markdown_wrapped_json() -> None:
+    claims = _claims_from_content(
+        """
+        Here is the extracted JSON:
+
+        ```json
+        {
+          "claims": [
+            {
+              "claim_id": "actual-1",
+              "claim_text": "Compute revenue increased.",
+              "claim_subject": "DEMAND_SIGNAL",
+              "claim_nature": "REALIZED",
+              "direction": "INCREASE",
+              "magnitude_qualifier": "STRONG",
+              "macro_variable": null,
+              "instrument_type": null,
+              "extraction_quality": {
+                "verbatim_overlap": 0.9,
+                "numeric_consistency": true,
+                "temporal_consistency": true,
+                "entity_consistency": true
+              },
+              "source_ref": {
+                "discovery_channel": "edgar_api",
+                "content_source": "10-Q",
+                "source_reliability": 0.95
+              },
+              "chunk_ref": "chunk-1",
+              "published_date": "2026-05-20"
+            }
+          ]
+        }
+        ```
+        """
+    )
+
+    assert claims[0].claim_subject == "DEMAND_SIGNAL"
+
+
+def test_schema_validation_rate_counts_invalid_live_responses() -> None:
+    responses = [
+        ExtractionResponse(
+            chunk_id="chunk-1",
+            claims=[],
+            usage=TokenUsage(prompt_tokens=0, completion_tokens=0),
+            latency_ms=0,
+            schema_valid=False,
+            error="ValidationError",
+        ),
+        ExtractionResponse(
+            chunk_id="chunk-2",
+            claims=[],
+            usage=TokenUsage(prompt_tokens=0, completion_tokens=0),
+            latency_ms=0,
+        ),
+    ]
+
+    assert _schema_validation_rate(responses, {"chunk-1": "text", "chunk-2": "text"}) == 0.5
 
 
 @pytest.mark.live

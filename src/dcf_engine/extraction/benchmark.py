@@ -197,10 +197,23 @@ def _run_live(
 ) -> list[ExtractionResponse]:
     # live 실행만 provider client를 만들고, replay 실행은 네트워크 경계를 지나지 않는다.
     client = _client_for_provider(provider=provider, model=model)
-    return [
-        client.extract_claims(chunk_id=chunk_id, chunk_text=chunk_text)
-        for chunk_id, chunk_text in chunks.items()
-    ]
+    responses: list[ExtractionResponse] = []
+    for chunk_id, chunk_text in chunks.items():
+        try:
+            responses.append(client.extract_claims(chunk_id=chunk_id, chunk_text=chunk_text))
+        except Exception as exc:
+            # schema 실패도 benchmark 결과이므로 전체 실행을 멈추지 않고 실패 chunk로 남긴다.
+            responses.append(
+                ExtractionResponse(
+                    chunk_id=chunk_id,
+                    claims=[],
+                    usage=TokenUsage(prompt_tokens=0, completion_tokens=0),
+                    latency_ms=0,
+                    schema_valid=False,
+                    error=f"{type(exc).__name__}: {exc}",
+                )
+            )
+    return responses
 
 
 def _schema_validation_rate(
@@ -211,8 +224,8 @@ def _schema_validation_rate(
         return 0.0
     if {response.chunk_id for response in response_list} != set(chunks):
         return 0.0
-    claim_count = sum(len(response.claims) for response in response_list)
-    return 1.0 if claim_count > 0 else 0.0
+    valid_count = sum(1 for response in response_list if response.schema_valid)
+    return valid_count / len(chunks)
 
 
 def _response_cost(response: ExtractionResponse, *, pricing: Pricing) -> float:
@@ -255,6 +268,8 @@ def _result_payload(
                     "completion_tokens": response.usage.completion_tokens,
                 },
                 "claims": [claim.model_dump(mode="json") for claim in response.claims],
+                "error": response.error,
+                "schema_valid": response.schema_valid,
             }
             for response in responses
         ],
