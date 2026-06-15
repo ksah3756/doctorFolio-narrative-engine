@@ -16,6 +16,7 @@ type EconomicDriverName = Literal[
     "customer_concentration",
     "financial_performance",
     "gross_margin",
+    "non_recurring_financial",
     "opex_pressure",
     "revenue_acceleration",
     "tariff_pressure",
@@ -137,6 +138,15 @@ def economic_driver_name(claim: Claim) -> EconomicDriverName:
     text = claim.claim_text.lower()
     if claim.claim_subject == "CAPITAL_ALLOCATION" or _mentions(text, "repurchase", "dividend"):
         return "capital_return"
+    if _mentions(
+        text,
+        "interest income",
+        "other income",
+        "unrealized gains",
+        "equity securities",
+        "non-marketable",
+    ):
+        return "non_recurring_financial"
     if _mentions(text, "tariff"):
         return "tariff_pressure"
     if _mentions(text, "china", "export control", "h200", "foreclosed"):
@@ -165,7 +175,7 @@ def economic_driver_name(claim: Claim) -> EconomicDriverName:
 def _routing_for_driver(
     driver: EconomicDriver, *, has_margin_recovery: bool
 ) -> dict[FactorName, float]:
-    if driver.name == "capital_return":
+    if driver.name in ("capital_return", "customer_concentration", "non_recurring_financial"):
         return {}
     routing = _routing_for_claim(driver.claim)
     if driver.name == "opex_pressure" and has_margin_recovery:
