@@ -105,6 +105,23 @@ def test_non_recurring_investment_gain_does_not_route_to_operating_factors() -> 
     assert factors == {}
 
 
+def test_china_export_risk_routes_away_from_default_probability_driver() -> None:
+    china_risk = _claim(
+        "FINANCIAL_HEALTH",
+        "DECREASE",
+        text=(
+            "China export controls may have a material adverse impact on business, "
+            "operating results, and financial condition."
+        ),
+    )
+
+    factors = route_claims_to_factors([china_risk], "growth")
+
+    assert "FinancialStrength" not in factors
+    assert factors["DemandStrength"].current_value < 0
+    assert factors["CompetitiveAdvantage"].current_value < 0
+
+
 def test_loading_shifts_revenue_up_and_margin_down_from_shared_factors() -> None:
     factors = route_claims_to_factors(
         [_claim("DEMAND_SIGNAL", "INCREASE"), _claim("COST_SIGNAL", "INCREASE")],
