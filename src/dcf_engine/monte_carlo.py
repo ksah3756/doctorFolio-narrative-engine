@@ -14,7 +14,7 @@ from dcf_engine.assumption import AssumptionState
 from dcf_engine.distributions import params_from_moments, sample_distribution
 from dcf_engine.factor import FactorState, Regime
 from dcf_engine.lifecycle import LifecycleStage
-from dcf_engine.loading import LOADING, apply_constraints
+from dcf_engine.loading import apply_constraints, shifted_mu_from_factors
 from dcf_engine.validation import passes_imputed_roic_check
 
 
@@ -167,11 +167,7 @@ def _sample_factors(
 
 
 def _shifted_mu(assumption: AssumptionState, sampled_factors: Mapping[str, float]) -> float:
-    loading = LOADING.get(assumption.name, {})
-    mu_shift = sum(
-        loading[name] * sampled_factors[name] for name in loading if name in sampled_factors
-    )
-    return assumption.base_mu + mu_shift * assumption.shift_scale.center
+    return shifted_mu_from_factors(assumption, sampled_factors)
 
 
 def _transpose_samples(samples: list[dict[str, float]]) -> dict[str, np.ndarray]:

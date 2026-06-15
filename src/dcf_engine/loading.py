@@ -19,6 +19,12 @@ SECTOR_MEDIAN: Final[dict[str, float]] = {
 }
 NARRATIVE_DEFAULT_PROBABILITY_CAP: Final = 0.05
 NARRATIVE_WACC_BAND: Final = 0.015
+NARRATIVE_SHIFT_CAPS: Final[dict[str, tuple[float, float]]] = {
+    "REVENUE_CAGR": (-0.03, 0.04),
+    "OPERATING_MARGIN": (-0.02, 0.03),
+    "MARKET_SHARE": (-0.02, 0.02),
+    "SALES_TO_CAPITAL_RATIO": (-0.25, 0.25),
+}
 MEAN_REVERT_TARGETS: Final[set[str]] = {
     "OPERATING_MARGIN",
     "SALES_TO_CAPITAL_RATIO",
@@ -68,22 +74,40 @@ def apply_factor_loadings(
     t_year: float,
 ) -> dict[str, AssumptionState]:
     shifted: dict[str, AssumptionState] = {}
+    factor_values = {name: factor.current_value for name, factor in factors.items()}
     for assumption in assumptions:
         if not assumption.active:
             continue
-        mu_shift = sum(
-            loading * factors[name].current_value
-            for name, loading in LOADING.get(assumption.name, {}).items()
-            if name in factors
-        )
-        scale = assumption.shift_scale.center
-        next_mu = assumption.base_mu + mu_shift * scale
+        next_mu = shifted_mu_from_factors(assumption, factor_values)
         next_mu = apply_mean_reversion(
             replace(assumption, current_mu=next_mu), t_year=t_year, company=company
         )
         constrained_mu = apply_constraints(next_mu, assumption, company)
         shifted[assumption.name] = replace(assumption, current_mu=constrained_mu)
     return shifted
+
+
+def shifted_mu_from_factors(
+    assumption: AssumptionState, factor_values: Mapping[str, float]
+) -> float:
+    return assumption.base_mu + narrative_shift_for_assumption(assumption, factor_values)
+
+
+def narrative_shift_for_assumption(
+    assumption: AssumptionState, factor_values: Mapping[str, float]
+) -> float:
+    loading = LOADING.get(assumption.name, {})
+    raw_factor_shift = sum(
+        loading[name] * factor_values[name] for name in loading if name in factor_values
+    )
+    raw_shift = raw_factor_shift * assumption.shift_scale.center
+    return cap_narrative_shift(assumption.name, raw_shift)
+
+
+def cap_narrative_shift(assumption_name: str, shift: float) -> float:
+    low, high = NARRATIVE_SHIFT_CAPS.get(assumption_name, (-math.inf, math.inf))
+    # factor 값이 커져도 valuation input은 assumption 단위 pp cap을 넘지 않게 한다.
+    return min(max(shift, low), high)
 
 
 def apply_mean_reversion(
