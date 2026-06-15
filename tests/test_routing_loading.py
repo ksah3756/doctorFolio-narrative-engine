@@ -52,6 +52,23 @@ def test_routing_compresses_overlapping_opex_claims() -> None:
     assert grouped["OperatingEfficiency"].current_value == one["OperatingEfficiency"].current_value
 
 
+def test_margin_recovery_nets_against_absolute_opex_growth() -> None:
+    margin = _claim(
+        "PRICING_SIGNAL",
+        "INCREASE",
+        text="Gross margin increased to 74.9% from 60.5%.",
+    )
+    opex = _claim(
+        "COST_SIGNAL",
+        "INCREASE",
+        text="Total operating expenses increased 52%.",
+    )
+
+    factors = route_claims_to_factors([margin, opex], "growth")
+
+    assert factors["OperatingEfficiency"].current_value >= 0
+
+
 def test_capital_return_does_not_route_to_operating_demand() -> None:
     buyback = _claim(
         "CAPITAL_ALLOCATION",
