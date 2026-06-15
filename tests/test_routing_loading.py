@@ -17,6 +17,49 @@ def test_routing_keeps_fact_direction_separate_from_value_sign() -> None:
     assert factors["OperatingEfficiency"].current_value < 0
 
 
+def test_routing_deduplicates_repeated_economic_drivers() -> None:
+    claim = _claim(
+        "DEMAND_SIGNAL",
+        "INCREASE",
+        text="Total revenue increased 85% year-over-year to $81.615 billion.",
+    )
+    duplicate = claim.model_copy(update={"claim_id": "duplicate-revenue"})
+
+    one = route_claims_to_factors([claim], "growth")
+    repeated = route_claims_to_factors([claim, duplicate], "growth")
+
+    assert repeated["DemandStrength"].current_value == one["DemandStrength"].current_value
+
+
+def test_routing_compresses_overlapping_opex_claims() -> None:
+    total_opex = _claim(
+        "COST_SIGNAL",
+        "INCREASE",
+        text="Total operating expenses increased 52%.",
+    )
+    components = [
+        _claim("COST_SIGNAL", "INCREASE", text="Research and development expense increased 58%."),
+        _claim("COST_SIGNAL", "INCREASE", text="Sales, general and administrative expense increased 25%."),
+    ]
+
+    grouped = route_claims_to_factors([total_opex, *components], "growth")
+    one = route_claims_to_factors([total_opex], "growth")
+
+    assert grouped["OperatingEfficiency"].current_value == one["OperatingEfficiency"].current_value
+
+
+def test_capital_return_does_not_route_to_operating_demand() -> None:
+    buyback = _claim(
+        "CAPITAL_ALLOCATION",
+        "INCREASE",
+        text="Board approved an additional $80 billion share repurchase authorization.",
+    )
+
+    factors = route_claims_to_factors([buyback], "growth")
+
+    assert "DemandStrength" not in factors
+
+
 def test_loading_shifts_revenue_up_and_margin_down_from_shared_factors() -> None:
     factors = route_claims_to_factors(
         [_claim("DEMAND_SIGNAL", "INCREASE"), _claim("COST_SIGNAL", "INCREASE")],
@@ -69,10 +112,15 @@ def test_wacc_has_narrow_narrative_premium_cap() -> None:
     assert shifted["WACC"].current_mu <= wacc.base_mu + 0.015
 
 
-def _claim(subject: ClaimSubject, direction: ClaimDirection) -> Claim:
+def _claim(
+    subject: ClaimSubject,
+    direction: ClaimDirection,
+    *,
+    text: str = "NVDA narrative claim.",
+) -> Claim:
     return Claim(
         claim_id=f"{subject}-{direction}",
-        claim_text="NVDA narrative claim.",
+        claim_text=text,
         claim_subject=subject,
         claim_nature="REALIZED",
         direction=direction,
