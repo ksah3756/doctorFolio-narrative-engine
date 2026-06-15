@@ -177,6 +177,8 @@ def _routing_for_driver(
 ) -> dict[FactorName, float]:
     if driver.name in ("capital_return", "customer_concentration", "non_recurring_financial"):
         return {}
+    if driver.name == "china_export_risk":
+        return {"DemandStrength": 0.5, "CompetitiveAdvantage": 0.5}
     routing = _routing_for_claim(driver.claim)
     if driver.name == "opex_pressure" and has_margin_recovery:
         # 매출/마진이 같이 개선되는 분기에는 절대 비용 증가를 효율 악화로 과대반영하지 않는다.
