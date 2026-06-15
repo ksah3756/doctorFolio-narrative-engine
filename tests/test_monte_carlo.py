@@ -95,6 +95,38 @@ def test_shifted_mu_uses_canonical_financial_strength_loading() -> None:
     )
 
 
+def test_shifted_mu_caps_revenue_cagr_in_assumption_space() -> None:
+    assumption = _assumption("REVENUE_CAGR", 0.25, 0.03, "normal")
+
+    positive = _shifted_mu(
+        assumption,
+        {"DemandStrength": 3.0, "CompetitiveAdvantage": 3.0, "MacroCondition": 3.0},
+    )
+    negative = _shifted_mu(
+        assumption,
+        {"DemandStrength": -3.0, "CompetitiveAdvantage": -3.0, "MacroCondition": -3.0},
+    )
+
+    assert positive <= assumption.base_mu + 0.04
+    assert negative >= assumption.base_mu - 0.03
+
+
+def test_shifted_mu_caps_operating_margin_in_assumption_space() -> None:
+    assumption = _assumption("OPERATING_MARGIN", 0.56, 0.03, "normal")
+
+    positive = _shifted_mu(
+        assumption,
+        {"CompetitiveAdvantage": 3.0, "OperatingEfficiency": 3.0, "DemandStrength": 3.0},
+    )
+    negative = _shifted_mu(
+        assumption,
+        {"CompetitiveAdvantage": -3.0, "OperatingEfficiency": -3.0, "DemandStrength": -3.0},
+    )
+
+    assert positive <= assumption.base_mu + 0.03
+    assert negative >= assumption.base_mu - 0.02
+
+
 def _assumption(name: str, mu: float, sigma: float, family: DistributionFamily) -> AssumptionState:
     return AssumptionState(
         name=name,
