@@ -43,6 +43,7 @@ NATURE_INFO_WEIGHT: Final[dict[str, float]] = {
     "STRUCTURAL": 1.2,
     "RISK_FLAG": 0.8,
 }
+OPEX_PRESSURE_WITH_MARGIN_RECOVERY_MULT: Final = 0.25
 NARRATIVE_SENSITIVITY_BY_STAGE: Final[dict[LifecycleStage, float]] = {
     "young": 1.5,
     "growth": 1.2,
@@ -78,10 +79,15 @@ MACRO_ROUTING: Final[dict[str, dict[FactorName, float]]] = {
 
 def route_claims_to_factors(claims: list[Claim], stage: LifecycleStage) -> dict[str, FactorState]:
     drivers = claims_to_economic_drivers(claims)
+    has_margin_recovery = any(
+        driver.name == "gross_margin" and driver.direction == "INCREASE" for driver in drivers
+    )
     totals: defaultdict[str, float] = defaultdict(float)
     same_direction_counts: defaultdict[tuple[str, int], int] = defaultdict(int)
     for driver in drivers:
-        for factor_name, intensity in _routing_for_driver(driver).items():
+        for factor_name, intensity in _routing_for_driver(
+            driver, has_margin_recovery=has_margin_recovery
+        ).items():
             raw = factor_shift(driver.claim, intensity, stage)
             sign_key = 1 if raw >= 0 else -1
             # 같은 방향 근거는 factor를 보강하되 폭주하지 않도록 점진적으로 감쇄한다.
@@ -156,10 +162,19 @@ def economic_driver_name(claim: Claim) -> EconomicDriverName:
     return "subject_signal"
 
 
-def _routing_for_driver(driver: EconomicDriver) -> dict[FactorName, float]:
+def _routing_for_driver(
+    driver: EconomicDriver, *, has_margin_recovery: bool
+) -> dict[FactorName, float]:
     if driver.name == "capital_return":
         return {}
-    return _routing_for_claim(driver.claim)
+    routing = _routing_for_claim(driver.claim)
+    if driver.name == "opex_pressure" and has_margin_recovery:
+        # 매출/마진이 같이 개선되는 분기에는 절대 비용 증가를 효율 악화로 과대반영하지 않는다.
+        return {
+            factor_name: intensity * OPEX_PRESSURE_WITH_MARGIN_RECOVERY_MULT
+            for factor_name, intensity in routing.items()
+        }
+    return routing
 
 
 def _routing_for_claim(claim: Claim) -> dict[FactorName, float]:
