@@ -39,7 +39,11 @@ def test_routing_compresses_overlapping_opex_claims() -> None:
     )
     components = [
         _claim("COST_SIGNAL", "INCREASE", text="Research and development expense increased 58%."),
-        _claim("COST_SIGNAL", "INCREASE", text="Sales, general and administrative expense increased 25%."),
+        _claim(
+            "COST_SIGNAL",
+            "INCREASE",
+            text="Sales, general and administrative expense increased 25%.",
+        ),
     ]
 
     grouped = route_claims_to_factors([total_opex, *components], "growth")

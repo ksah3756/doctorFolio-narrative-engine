@@ -3,11 +3,32 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import Final
+from dataclasses import dataclass
+from typing import Final, Literal
 
-from dcf_engine.claim import Claim, ClaimSubject, source_reliability
+from dcf_engine.claim import Claim, ClaimDirection, ClaimSubject, source_reliability
 from dcf_engine.factor import FactorName, FactorState
 from dcf_engine.lifecycle import LifecycleStage
+
+type EconomicDriverName = Literal[
+    "capital_return",
+    "china_export_risk",
+    "customer_concentration",
+    "financial_performance",
+    "gross_margin",
+    "opex_pressure",
+    "revenue_acceleration",
+    "tariff_pressure",
+    "subject_signal",
+]
+
+
+@dataclass(frozen=True)
+class EconomicDriver:
+    name: EconomicDriverName
+    direction: ClaimDirection
+    claim: Claim
+
 
 MAGNITUDE_TO_SIGMA: Final[dict[str, float]] = {
     "WEAK": 0.25,
@@ -56,11 +77,12 @@ MACRO_ROUTING: Final[dict[str, dict[FactorName, float]]] = {
 
 
 def route_claims_to_factors(claims: list[Claim], stage: LifecycleStage) -> dict[str, FactorState]:
+    drivers = claims_to_economic_drivers(claims)
     totals: defaultdict[str, float] = defaultdict(float)
     same_direction_counts: defaultdict[tuple[str, int], int] = defaultdict(int)
-    for claim in claims:
-        for factor_name, intensity in _routing_for_claim(claim).items():
-            raw = factor_shift(claim, intensity, stage)
+    for driver in drivers:
+        for factor_name, intensity in _routing_for_driver(driver).items():
+            raw = factor_shift(driver.claim, intensity, stage)
             sign_key = 1 if raw >= 0 else -1
             # 같은 방향 근거는 factor를 보강하되 폭주하지 않도록 점진적으로 감쇄한다.
             saturation = 1 / (1 + same_direction_counts[(factor_name, sign_key)] * 0.3)
@@ -70,6 +92,20 @@ def route_claims_to_factors(claims: list[Claim], stage: LifecycleStage) -> dict[
         name: FactorState(name=name, current_value=max(min(value, 3.0), -3.0))
         for name, value in totals.items()
     }
+
+
+def claims_to_economic_drivers(claims: list[Claim]) -> list[EconomicDriver]:
+    selected: dict[tuple[EconomicDriverName, ClaimDirection, str], Claim] = {}
+    for claim in claims:
+        driver_name = economic_driver_name(claim)
+        key = (driver_name, claim.direction, _driver_scope(driver_name, claim))
+        current = selected.get(key)
+        if current is None or _driver_evidence_weight(claim) > _driver_evidence_weight(current):
+            selected[key] = claim
+    return [
+        EconomicDriver(name=name, direction=direction, claim=claim)
+        for (name, direction, _), claim in selected.items()
+    ]
 
 
 def factor_shift(claim: Claim, routing_intensity: float, stage: LifecycleStage) -> float:
@@ -91,7 +127,60 @@ def narrative_sensitivity(stage: LifecycleStage, subject: ClaimSubject) -> float
     return NARRATIVE_SENSITIVITY_BY_STAGE[stage]
 
 
+def economic_driver_name(claim: Claim) -> EconomicDriverName:
+    text = claim.claim_text.lower()
+    if claim.claim_subject == "CAPITAL_ALLOCATION" or _mentions(text, "repurchase", "dividend"):
+        return "capital_return"
+    if _mentions(text, "tariff"):
+        return "tariff_pressure"
+    if _mentions(text, "china", "export control", "h200", "foreclosed"):
+        return "china_export_risk"
+    if _mentions(text, "customer") and _mentions(text, "represented", "concentrat"):
+        return "customer_concentration"
+    if _mentions(text, "gross margin", "operating margin"):
+        return "gross_margin"
+    if claim.claim_subject == "COST_SIGNAL" and _mentions(
+        text,
+        "operating expenses",
+        "research and development",
+        "sales, general and administrative",
+        "compensation",
+        "compute and infrastructure",
+        "engineering development",
+    ):
+        return "opex_pressure"
+    if claim.claim_subject == "DEMAND_SIGNAL" and _mentions(text, "revenue", "sales"):
+        return "revenue_acceleration"
+    if claim.claim_subject == "FINANCIAL_HEALTH":
+        return "financial_performance"
+    return "subject_signal"
+
+
+def _routing_for_driver(driver: EconomicDriver) -> dict[FactorName, float]:
+    if driver.name == "capital_return":
+        return {}
+    return _routing_for_claim(driver.claim)
+
+
 def _routing_for_claim(claim: Claim) -> dict[FactorName, float]:
     if claim.claim_subject == "MACRO_EXPOSURE" and claim.macro_variable is not None:
         return MACRO_ROUTING.get(claim.macro_variable, {})
     return ROUTING[claim.claim_subject]
+
+
+def _driver_evidence_weight(claim: Claim) -> float:
+    return (
+        MAGNITUDE_TO_SIGMA[claim.magnitude_qualifier]
+        * NATURE_INFO_WEIGHT[claim.claim_nature]
+        * source_reliability(claim.source_ref)
+    )
+
+
+def _driver_scope(driver_name: EconomicDriverName, claim: Claim) -> str:
+    if driver_name == "subject_signal":
+        return claim.claim_subject
+    return ""
+
+
+def _mentions(text: str, *needles: str) -> bool:
+    return any(needle in text for needle in needles)
