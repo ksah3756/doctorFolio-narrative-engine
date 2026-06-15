@@ -81,6 +81,30 @@ def test_capital_return_does_not_route_to_operating_demand() -> None:
     assert "DemandStrength" not in factors
 
 
+def test_customer_concentration_is_context_only_for_operating_factors() -> None:
+    concentration = _claim(
+        "DEMAND_SIGNAL",
+        "INCREASE",
+        text="Three direct customers represented 21%, 17%, and 16% of total revenue.",
+    )
+
+    factors = route_claims_to_factors([concentration], "growth")
+
+    assert factors == {}
+
+
+def test_non_recurring_investment_gain_does_not_route_to_operating_factors() -> None:
+    investment_gain = _claim(
+        "FINANCIAL_HEALTH",
+        "INCREASE",
+        text="Unrealized gains on publicly-held equity securities were $13.4 billion.",
+    )
+
+    factors = route_claims_to_factors([investment_gain], "growth")
+
+    assert factors == {}
+
+
 def test_loading_shifts_revenue_up_and_margin_down_from_shared_factors() -> None:
     factors = route_claims_to_factors(
         [_claim("DEMAND_SIGNAL", "INCREASE"), _claim("COST_SIGNAL", "INCREASE")],
