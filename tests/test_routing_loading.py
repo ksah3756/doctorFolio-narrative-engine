@@ -2,6 +2,7 @@ from datetime import date
 
 from dcf_engine.assumption import AssumptionState, ScaleSpec
 from dcf_engine.claim import Claim, ClaimDirection, ClaimSubject, ExtractionQuality, SourceRef
+from dcf_engine.factor import FactorState
 from dcf_engine.loading import apply_factor_loadings, apply_mean_reversion
 from dcf_engine.routing import route_claims_to_factors
 
@@ -38,6 +39,34 @@ def test_sales_to_capital_reversion_floor_uses_roic_equals_wacc_relation() -> No
     reverted = apply_mean_reversion(asm, t_year=10.0, company=_company())
 
     assert reverted > asm.current_mu
+
+
+def test_default_probability_has_narrative_cap() -> None:
+    default_probability = _assumption("DEFAULT_PROBABILITY", 0.015, 0.008)
+    factors = {
+        "FinancialStrength": FactorState(name="FinancialStrength", current_value=-3.0),
+        "OperatingEfficiency": FactorState(name="OperatingEfficiency", current_value=-3.0),
+        "MacroCondition": FactorState(name="MacroCondition", current_value=-3.0),
+    }
+
+    shifted = apply_factor_loadings(
+        [default_probability], factors, stage="growth", company=_company(), t_year=1.0
+    )
+
+    assert shifted["DEFAULT_PROBABILITY"].current_mu <= 0.05
+
+
+def test_wacc_has_narrow_narrative_premium_cap() -> None:
+    wacc = _assumption("WACC", 0.095, 0.012)
+    factors = {
+        "FinancialStrength": FactorState(name="FinancialStrength", current_value=-3.0),
+        "OperatingEfficiency": FactorState(name="OperatingEfficiency", current_value=-3.0),
+        "MacroCondition": FactorState(name="MacroCondition", current_value=-3.0),
+    }
+
+    shifted = apply_factor_loadings([wacc], factors, stage="growth", company=_company(), t_year=1.0)
+
+    assert shifted["WACC"].current_mu <= wacc.base_mu + 0.015
 
 
 def _claim(subject: ClaimSubject, direction: ClaimDirection) -> Claim:
