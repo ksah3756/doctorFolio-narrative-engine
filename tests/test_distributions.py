@@ -51,6 +51,15 @@ def test_beta_from_moments_returns_positive_shape_parameters() -> None:
     assert alpha / (alpha + beta) == pytest.approx(0.6)
 
 
+@pytest.mark.parametrize("mu", [1e-6, 1 - 1e-6])
+def test_beta_from_moments_preserves_boundary_mean(mu: float) -> None:
+    alpha, beta = beta_from_moments(mu, 0.008)
+
+    assert alpha > 0
+    assert beta > 0
+    assert alpha / (alpha + beta) == pytest.approx(mu, rel=1e-6, abs=1e-9)
+
+
 def test_student_t_params_match_requested_variance() -> None:
     loc, scale, df = t_params_from_moments(0.22, 0.08)
 
