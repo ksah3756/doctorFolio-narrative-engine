@@ -17,6 +17,8 @@ SECTOR_MEDIAN: Final[dict[str, float]] = {
     "SALES_TO_CAPITAL_RATIO": 2.8,
     "ROIC": 0.16,
 }
+NARRATIVE_DEFAULT_PROBABILITY_CAP: Final = 0.05
+NARRATIVE_WACC_BAND: Final = 0.015
 MEAN_REVERT_TARGETS: Final[set[str]] = {
     "OPERATING_MARGIN",
     "SALES_TO_CAPITAL_RATIO",
@@ -121,10 +123,25 @@ def apply_constraints(
         return min(value, assumption.constraints.get("risk_free_rate", 0.045))
     if assumption.name == "WACC":
         risk_free = assumption.constraints.get("risk_free_rate", 0.045)
-        return min(max(value, risk_free), 0.30)
+        band = company.get("narrative_wacc_band", NARRATIVE_WACC_BAND)
+        low = max(risk_free, assumption.base_mu - band)
+        high = min(assumption.constraints.get("high", 0.30), assumption.base_mu + band)
+        # WACC는 narrative로 방향성만 조정한다.
+        # 할인율 체계 자체는 별도 credit/capital model에 맡긴다.
+        return min(max(value, low), high)
     if assumption.name == "OPERATING_MARGIN":
         return min(max(value, -0.5), company["industry_top_decile"] * 1.1)
     if assumption.name in ("MARKET_SHARE", "DEFAULT_PROBABILITY"):
+        if assumption.name == "DEFAULT_PROBABILITY":
+            high = min(
+                assumption.constraints.get("high", 1 - 1e-6),
+                company.get(
+                    "narrative_default_probability_cap",
+                    NARRATIVE_DEFAULT_PROBABILITY_CAP,
+                ),
+            )
+            # 부도확률은 재무제표 기반 base가 주도하고 narrative는 작은 premium 안에서만 움직인다.
+            return min(max(value, 1e-6), high)
         return min(max(value, 1e-6), 1 - 1e-6)
     if assumption.name == "REVENUE_CAGR":
         return min(max(value, -0.5), 2.0)
