@@ -28,10 +28,9 @@ CHUNKS_DIR = ROOT / "data" / "benchmark" / "chunks"
 GOLD_FACTS_PATH = ROOT / "data" / "benchmark" / "gold_facts.json"
 HAIKU_RESULT_PATH = (
     ROOT
-    / "data"
-    / "benchmark"
-    / "results"
-    / "claude-haiku-4-5-20251001__20260607T081235Z.json"
+    / "tests"
+    / "fixtures"
+    / "haiku-scorecard-regression.json"
 )
 
 
