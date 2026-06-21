@@ -4,9 +4,11 @@ __pycache__/
 .ruff_cache/
 .mypy_cache/
 .coverage
+.env
+.env.*
 htmlcov/
 dist/
 build/
 *.egg-info/
 .DS_Store
-
+data/benchmark/results/*.json

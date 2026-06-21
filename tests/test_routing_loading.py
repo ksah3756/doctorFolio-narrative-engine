@@ -2,6 +2,7 @@ from datetime import date
 
 from dcf_engine.assumption import AssumptionState, ScaleSpec
 from dcf_engine.claim import Claim, ClaimDirection, ClaimSubject, ExtractionQuality, SourceRef
+from dcf_engine.factor import FactorState
 from dcf_engine.loading import apply_factor_loadings, apply_mean_reversion
 from dcf_engine.routing import route_claims_to_factors
 
@@ -14,6 +15,111 @@ def test_routing_keeps_fact_direction_separate_from_value_sign() -> None:
 
     assert factors["DemandStrength"].current_value > 0
     assert factors["OperatingEfficiency"].current_value < 0
+
+
+def test_routing_deduplicates_repeated_economic_drivers() -> None:
+    claim = _claim(
+        "DEMAND_SIGNAL",
+        "INCREASE",
+        text="Total revenue increased 85% year-over-year to $81.615 billion.",
+    )
+    duplicate = claim.model_copy(update={"claim_id": "duplicate-revenue"})
+
+    one = route_claims_to_factors([claim], "growth")
+    repeated = route_claims_to_factors([claim, duplicate], "growth")
+
+    assert repeated["DemandStrength"].current_value == one["DemandStrength"].current_value
+
+
+def test_routing_compresses_overlapping_opex_claims() -> None:
+    total_opex = _claim(
+        "COST_SIGNAL",
+        "INCREASE",
+        text="Total operating expenses increased 52%.",
+    )
+    components = [
+        _claim("COST_SIGNAL", "INCREASE", text="Research and development expense increased 58%."),
+        _claim(
+            "COST_SIGNAL",
+            "INCREASE",
+            text="Sales, general and administrative expense increased 25%.",
+        ),
+    ]
+
+    grouped = route_claims_to_factors([total_opex, *components], "growth")
+    one = route_claims_to_factors([total_opex], "growth")
+
+    assert grouped["OperatingEfficiency"].current_value == one["OperatingEfficiency"].current_value
+
+
+def test_margin_recovery_nets_against_absolute_opex_growth() -> None:
+    margin = _claim(
+        "PRICING_SIGNAL",
+        "INCREASE",
+        text="Gross margin increased to 74.9% from 60.5%.",
+    )
+    opex = _claim(
+        "COST_SIGNAL",
+        "INCREASE",
+        text="Total operating expenses increased 52%.",
+    )
+
+    factors = route_claims_to_factors([margin, opex], "growth")
+
+    assert factors["OperatingEfficiency"].current_value >= 0
+
+
+def test_capital_return_does_not_route_to_operating_demand() -> None:
+    buyback = _claim(
+        "CAPITAL_ALLOCATION",
+        "INCREASE",
+        text="Board approved an additional $80 billion share repurchase authorization.",
+    )
+
+    factors = route_claims_to_factors([buyback], "growth")
+
+    assert "DemandStrength" not in factors
+
+
+def test_customer_concentration_is_context_only_for_operating_factors() -> None:
+    concentration = _claim(
+        "DEMAND_SIGNAL",
+        "INCREASE",
+        text="Three direct customers represented 21%, 17%, and 16% of total revenue.",
+    )
+
+    factors = route_claims_to_factors([concentration], "growth")
+
+    assert factors == {}
+
+
+def test_non_recurring_investment_gain_does_not_route_to_operating_factors() -> None:
+    investment_gain = _claim(
+        "FINANCIAL_HEALTH",
+        "INCREASE",
+        text="Unrealized gains on publicly-held equity securities were $13.4 billion.",
+    )
+
+    factors = route_claims_to_factors([investment_gain], "growth")
+
+    assert factors == {}
+
+
+def test_china_export_risk_routes_away_from_default_probability_driver() -> None:
+    china_risk = _claim(
+        "FINANCIAL_HEALTH",
+        "DECREASE",
+        text=(
+            "China export controls may have a material adverse impact on business, "
+            "operating results, and financial condition."
+        ),
+    )
+
+    factors = route_claims_to_factors([china_risk], "growth")
+
+    assert "FinancialStrength" not in factors
+    assert factors["DemandStrength"].current_value < 0
+    assert factors["CompetitiveAdvantage"].current_value < 0
 
 
 def test_loading_shifts_revenue_up_and_margin_down_from_shared_factors() -> None:
@@ -40,10 +146,43 @@ def test_sales_to_capital_reversion_floor_uses_roic_equals_wacc_relation() -> No
     assert reverted > asm.current_mu
 
 
-def _claim(subject: ClaimSubject, direction: ClaimDirection) -> Claim:
+def test_default_probability_has_narrative_cap() -> None:
+    default_probability = _assumption("DEFAULT_PROBABILITY", 0.015, 0.008)
+    factors = {
+        "FinancialStrength": FactorState(name="FinancialStrength", current_value=-3.0),
+        "OperatingEfficiency": FactorState(name="OperatingEfficiency", current_value=-3.0),
+        "MacroCondition": FactorState(name="MacroCondition", current_value=-3.0),
+    }
+
+    shifted = apply_factor_loadings(
+        [default_probability], factors, stage="growth", company=_company(), t_year=1.0
+    )
+
+    assert shifted["DEFAULT_PROBABILITY"].current_mu <= 0.05
+
+
+def test_wacc_has_narrow_narrative_premium_cap() -> None:
+    wacc = _assumption("WACC", 0.095, 0.012)
+    factors = {
+        "FinancialStrength": FactorState(name="FinancialStrength", current_value=-3.0),
+        "OperatingEfficiency": FactorState(name="OperatingEfficiency", current_value=-3.0),
+        "MacroCondition": FactorState(name="MacroCondition", current_value=-3.0),
+    }
+
+    shifted = apply_factor_loadings([wacc], factors, stage="growth", company=_company(), t_year=1.0)
+
+    assert shifted["WACC"].current_mu <= wacc.base_mu + 0.015
+
+
+def _claim(
+    subject: ClaimSubject,
+    direction: ClaimDirection,
+    *,
+    text: str = "NVDA narrative claim.",
+) -> Claim:
     return Claim(
         claim_id=f"{subject}-{direction}",
-        claim_text="NVDA narrative claim.",
+        claim_text=text,
         claim_subject=subject,
         claim_nature="REALIZED",
         direction=direction,

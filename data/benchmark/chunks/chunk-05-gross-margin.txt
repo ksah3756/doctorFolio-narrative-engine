@@ -1,0 +1,6 @@
+# source_filing: NVIDIA Form 10-Q, accession 0001045810-26-000052
+# source_url: https://www.sec.gov/Archives/edgar/data/1045810/000104581026000052/nvda-20260426.htm
+# source_page: 27
+# period: quarter ended April 26, 2026
+
+Gross Profit and Gross Margin. Gross profit consists of total net revenue less cost of revenue. Cost of revenue consists primarily of the cost of semiconductors, including wafer fabrication, assembly, testing and packaging, board and device costs, manufacturing support costs, final test yield fallout, inventory and warranty provisions, memory and component costs, tariffs, and shipping costs. Gross margin increased to 74.9% for the first quarter of fiscal year 2027 compared to 60.5% for the first quarter of fiscal year 2026, primarily due to the prior year's $4.5 billion charge associated with H20 excess inventory and purchase obligations. Provisions for inventory and excess inventory purchase obligations totaled $1.1 billion and $5.3 billion for the first quarter of fiscal years 2027 and 2026, respectively. Sales of previously reserved inventory and settlements of excess inventory purchase obligations resulted in a provision release of $103 million and $436 million, respectively.

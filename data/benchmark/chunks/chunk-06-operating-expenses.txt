@@ -1,0 +1,6 @@
+# source_filing: NVIDIA Form 10-Q, accession 0001045810-26-000052
+# source_url: https://www.sec.gov/Archives/edgar/data/1045810/000104581026000052/nvda-20260426.htm
+# source_page: 27
+# period: quarter ended April 26, 2026
+
+Operating Expenses. Research and development expense was $6.321 billion for the three months ended April 26, 2026, compared with $3.989 billion for the three months ended April 27, 2025, an increase of $2.332 billion, or 58%. Sales, general and administrative expense was $1.300 billion compared with $1.041 billion, an increase of $259 million, or 25%. Total operating expenses were $7.621 billion compared with $5.030 billion, an increase of $2.591 billion, or 52%. The increase in research and development expenses was primarily driven by a 112% increase in compute and infrastructure, a 31% increase in compensation and benefits, including stock-based compensation, reflecting employee growth and compensation increases, and a 204% increase in engineering development materials for new product introductions. The increase in sales, general and administrative expenses was primarily driven by compensation and benefits.

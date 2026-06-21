@@ -1,0 +1,6 @@
+# source_filing: NVIDIA Form 10-Q, accession 0001045810-26-000052
+# source_url: https://www.sec.gov/Archives/edgar/data/1045810/000104581026000052/nvda-20260426.htm
+# source_page: 26
+# period: quarter ended April 26, 2026
+
+Indirect Customers. Indirect customer revenue is an estimation based upon multiple factors including customer purchase order information, product specifications, internal sales data, and other sources. Indirect customers primarily purchase our products through system integrators and distributors. We generate a significant amount of our revenue from a limited number of indirect customers, some individually representing 10% or more of our revenue. Certain companies purchase cloud and related services through various direct and indirect customers. We estimate that one AI research and deployment company contributed to a meaningful amount of our revenue by purchasing cloud services from our customers in the first quarter of fiscal year 2027. Revenue by geographic region is designated based on the headquarters location of direct customers. Revenue from sales to customers headquartered outside the United States accounted for 22% of total revenue for the first quarter of fiscal year 2027 and 42% for the first quarter of fiscal year 2026.
