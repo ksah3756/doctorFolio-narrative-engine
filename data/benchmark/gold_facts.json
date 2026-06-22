@@ -1,0 +1,830 @@
+{
+  "schema_version": 2,
+  "label_status": "draft_pending_user_freeze",
+  "source_filing": {
+    "company": "NVIDIA CORP",
+    "form": "10-Q",
+    "accession": "0001045810-26-000052",
+    "filing_date": "2026-05-20",
+    "period_end": "2026-04-26",
+    "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000052/nvda-20260426.htm"
+  },
+  "magnitude_bands": {
+    "basis": "abs_relative_pct_change",
+    "WEAK": {"min": 0, "max": 10},
+    "MODERATE": {"min": 10, "max": 30},
+    "STRONG": {"min": 30, "max": 70},
+    "EXTREME": {"min": 70, "max": null}
+  },
+  "labeling_rule": "Facts are chunk-scoped and exhaustive. A predicted claim matches a gold fact when it is grounded in the same evidence_span / numeric_facts. Multiple predicted claims may map to one fact (many-to-one). subject is correct if it is in allowed_subjects. direction is derived from current vs prior values. magnitude is derived from magnitude_bands for numeric facts. Numeric exactness, direction, magnitude, and subject are scored as separate axes, not as one exact-match tuple.",
+  "facts_by_chunk": {
+    "chunk-01-revenue-overview": [
+      {
+        "fact_id": "fact-01-01",
+        "canonical_statement": "Compute & Networking revenue increased 88% year over year to $74.550 billion in Q1 FY2027.",
+        "evidence_span": "Compute & Networking revenue of $74.550 billion compared with $39.589 billion, a year-over-year increase of $34.961 billion, or 88%",
+        "allowed_subjects": ["DEMAND_SIGNAL", "FINANCIAL_HEALTH"],
+        "direction": "INCREASE",
+        "magnitude_qualifier": "EXTREME",
+        "magnitude_basis": "numeric",
+        "acceptable_natures": ["REALIZED"],
+        "period": {"current": "Q1 FY2027", "prior": "Q1 FY2026"},
+        "numeric_facts": [
+          {"metric": "Compute & Networking revenue", "value": 74.550, "unit": "USD_BN", "period": "current"},
+          {"metric": "Compute & Networking revenue", "value": 39.589, "unit": "USD_BN", "period": "prior"},
+          {"metric": "Compute & Networking revenue", "value": 34.961, "unit": "USD_BN", "period": "change"},
+          {"metric": "Compute & Networking revenue", "value": 88, "unit": "PCT", "period": "change_pct"}
+        ],
+        "macro_variable": null,
+        "salience": "primary"
+      },
+      {
+        "fact_id": "fact-01-02",
+        "canonical_statement": "Graphics revenue increased 58% year over year to $7.065 billion in Q1 FY2027.",
+        "evidence_span": "Graphics revenue was $7.065 billion compared with $4.473 billion, a year-over-year increase of $2.592 billion, or 58%",
+        "allowed_subjects": ["DEMAND_SIGNAL", "FINANCIAL_HEALTH"],
+        "direction": "INCREASE",
+        "magnitude_qualifier": "STRONG",
+        "magnitude_basis": "numeric",
+        "acceptable_natures": ["REALIZED"],
+        "period": {"current": "Q1 FY2027", "prior": "Q1 FY2026"},
+        "numeric_facts": [
+          {"metric": "Graphics revenue", "value": 7.065, "unit": "USD_BN", "period": "current"},
+          {"metric": "Graphics revenue", "value": 4.473, "unit": "USD_BN", "period": "prior"},
+          {"metric": "Graphics revenue", "value": 2.592, "unit": "USD_BN", "period": "change"},
+          {"metric": "Graphics revenue", "value": 58, "unit": "PCT", "period": "change_pct"}
+        ],
+        "macro_variable": null,
+        "salience": "secondary"
+      },
+      {
+        "fact_id": "fact-01-03",
+        "canonical_statement": "Total revenue increased 85% year over year to $81.615 billion in Q1 FY2027.",
+        "evidence_span": "Total revenue was $81.615 billion compared with $44.062 billion, an increase of $37.553 billion, or 85%",
+        "allowed_subjects": ["DEMAND_SIGNAL", "FINANCIAL_HEALTH"],
+        "direction": "INCREASE",
+        "magnitude_qualifier": "EXTREME",
+        "magnitude_basis": "numeric",
+        "acceptable_natures": ["REALIZED"],
+        "period": {"current": "Q1 FY2027", "prior": "Q1 FY2026"},
+        "numeric_facts": [
+          {"metric": "Total revenue", "value": 81.615, "unit": "USD_BN", "period": "current"},
+          {"metric": "Total revenue", "value": 44.062, "unit": "USD_BN", "period": "prior"},
+          {"metric": "Total revenue", "value": 37.553, "unit": "USD_BN", "period": "change"},
+          {"metric": "Total revenue", "value": 85, "unit": "PCT", "period": "change_pct"}
+        ],
+        "macro_variable": null,
+        "salience": "primary"
+      },
+      {
+        "fact_id": "fact-01-04",
+        "canonical_statement": "Compute & Networking operating income increased 142% year over year to $53.335 billion in Q1 FY2027.",
+        "evidence_span": "Compute & Networking operating income was $53.335 billion compared with $22.054 billion, up 142%",
+        "allowed_subjects": ["FINANCIAL_HEALTH"],
+        "direction": "INCREASE",
+        "magnitude_qualifier": "EXTREME",
+        "magnitude_basis": "numeric",
+        "acceptable_natures": ["REALIZED"],
+        "period": {"current": "Q1 FY2027", "prior": "Q1 FY2026"},
+        "numeric_facts": [
+          {"metric": "Compute & Networking operating income", "value": 53.335, "unit": "USD_BN", "period": "current"},
+          {"metric": "Compute & Networking operating income", "value": 22.054, "unit": "USD_BN", "period": "prior"},
+          {"metric": "Compute & Networking operating income", "value": 142, "unit": "PCT", "period": "change_pct"}
+        ],
+        "macro_variable": null,
+        "salience": "primary"
+      },
+      {
+        "fact_id": "fact-01-05",
+        "canonical_statement": "Graphics operating income increased 79% year over year to $2.941 billion in Q1 FY2027.",
+        "evidence_span": "Graphics operating income was $2.941 billion compared with $1.640 billion, up 79%",
+        "allowed_subjects": ["FINANCIAL_HEALTH"],
+        "direction": "INCREASE",
+        "magnitude_qualifier": "EXTREME",
+        "magnitude_basis": "numeric",
+        "acceptable_natures": ["REALIZED"],
+        "period": {"current": "Q1 FY2027", "prior": "Q1 FY2026"},
+        "numeric_facts": [
+          {"metric": "Graphics operating income", "value": 2.941, "unit": "USD_BN", "period": "current"},
+          {"metric": "Graphics operating income", "value": 1.640, "unit": "USD_BN", "period": "prior"},
+          {"metric": "Graphics operating income", "value": 79, "unit": "PCT", "period": "change_pct"}
+        ],
+        "macro_variable": null,
+        "salience": "secondary"
+      },
+      {
+        "fact_id": "fact-01-06",
+        "canonical_statement": "Total reportable segment operating income increased 138% year over year to $56.276 billion in Q1 FY2027.",
+        "evidence_span": "Total reportable segment operating income was $56.276 billion compared with $23.694 billion, up 138%",
+        "allowed_subjects": ["FINANCIAL_HEALTH"],
+        "direction": "INCREASE",
+        "magnitude_qualifier": "EXTREME",
+        "magnitude_basis": "numeric",
+        "acceptable_natures": ["REALIZED"],
+        "period": {"current": "Q1 FY2027", "prior": "Q1 FY2026"},
+        "numeric_facts": [
+          {"metric": "Total reportable segment operating income", "value": 56.276, "unit": "USD_BN", "period": "current"},
+          {"metric": "Total reportable segment operating income", "value": 23.694, "unit": "USD_BN", "period": "prior"},
+          {"metric": "Total reportable segment operating income", "value": 138, "unit": "PCT", "period": "change_pct"}
+        ],
+        "macro_variable": null,
+        "salience": "primary"
+      }
+    ],
+    "chunk-02-data-center-demand": [
+      {
+        "fact_id": "fact-02-01",
+        "canonical_statement": "Compute & Networking revenue growth was driven by Data Center products, Blackwell systems, and networking demand.",
+        "evidence_span": "growth in Data Center products, driven by the ramp of our Blackwell systems and demand for our InfiniBand, Spectrum-X Ethernet, and NVLink solutions",
+        "allowed_subjects": ["DEMAND_SIGNAL"],
+        "direction": "INCREASE",
+        "magnitude_qualifier": "STRONG",
+        "magnitude_basis": "qualitative",
+        "acceptable_natures": ["REALIZED"],
+        "period": {"current": "Q1 FY2027", "prior": "Q1 FY2026"},
+        "numeric_facts": [],
+        "macro_variable": null,
+        "salience": "primary"
+      },
+      {
+        "fact_id": "fact-02-02",
+        "canonical_statement": "Graphics revenue growth was driven by sales of Blackwell architecture.",
+        "evidence_span": "Graphics revenue. The year-over-year increase in the first quarter of fiscal year 2027 was driven by sales of our Blackwell architecture",
+        "allowed_subjects": ["DEMAND_SIGNAL"],
+        "direction": "INCREASE",
+        "magnitude_qualifier": "MODERATE",
+        "magnitude_basis": "qualitative",
+        "acceptable_natures": ["REALIZED"],
+        "period": {"current": "Q1 FY2027", "prior": "Q1 FY2026"},
+        "numeric_facts": [],
+        "macro_variable": null,
+        "salience": "secondary"
+      },
+      {
+        "fact_id": "fact-02-03",
+        "canonical_statement": "Compute & Networking operating income growth was helped by revenue growth and non-recurrence of a prior $4.5 billion H20 charge.",
+        "evidence_span": "Compute & Networking segment operating income in the first quarter of fiscal year 2027 was driven by the growth in revenue and the non-recurrence of a $4.5 billion charge associated with H20 excess inventory and purchase obligations",
+        "allowed_subjects": ["FINANCIAL_HEALTH", "COST_SIGNAL"],
+        "direction": "INCREASE",
+        "magnitude_qualifier": "STRONG",
+        "magnitude_basis": "qualitative",
+        "acceptable_natures": ["REALIZED"],
+        "period": {"current": "Q1 FY2027", "prior": "Q1 FY2026"},
+        "numeric_facts": [
+          {"metric": "H20 excess inventory and purchase obligations charge", "value": 4.5, "unit": "USD_BN", "period": "prior"}
+        ],
+        "macro_variable": null,
+        "salience": "primary"
+      },
+      {
+        "fact_id": "fact-02-04",
+        "canonical_statement": "Graphics segment operating income growth was driven by revenue growth.",
+        "evidence_span": "Graphics segment operating income in the first quarter of fiscal year 2027 was driven by the growth in revenue",
+        "allowed_subjects": ["FINANCIAL_HEALTH", "DEMAND_SIGNAL"],
+        "direction": "INCREASE",
+        "magnitude_qualifier": "MODERATE",
+        "magnitude_basis": "qualitative",
+        "acceptable_natures": ["REALIZED"],
+        "period": {"current": "Q1 FY2027", "prior": "Q1 FY2026"},
+        "numeric_facts": [],
+        "macro_variable": null,
+        "salience": "secondary"
+      }
+    ],
+    "chunk-03-customer-concentration": [
+      {
+        "fact_id": "fact-03-01",
+        "canonical_statement": "NVIDIA revenue is concentrated among a limited number of direct and indirect customers and the trend may continue.",
+        "evidence_span": "Our revenue is concentrated among a limited number of direct and indirect customers and this trend may continue",
+        "allowed_subjects": ["MARKET_STRUCTURE"],
+        "direction": "NEUTRAL",
+        "magnitude_qualifier": "MODERATE",
+        "magnitude_basis": "qualitative",
+        "acceptable_natures": ["STRUCTURAL", "RISK_FLAG"],
+        "period": {"current": "Q1 FY2027", "prior": null},
+        "numeric_facts": [],
+        "macro_variable": null,
+        "salience": "primary"
+      },
+      {
+        "fact_id": "fact-03-02",
+        "canonical_statement": "Three direct customers represented 21%, 17%, and 16% of Q1 FY2027 total revenue, primarily from Compute & Networking.",
+        "evidence_span": "three direct customers represented 21%, 17%, and 16% of total revenue, all primarily attributable to the Compute & Networking segment",
+        "allowed_subjects": ["MARKET_STRUCTURE", "FINANCIAL_HEALTH"],
+        "direction": "NEUTRAL",
+        "magnitude_qualifier": "STRONG",
+        "magnitude_basis": "qualitative",
+        "acceptable_natures": ["REALIZED", "STRUCTURAL"],
+        "period": {"current": "Q1 FY2027", "prior": null},
+        "numeric_facts": [
+          {"metric": "direct customer revenue share 1", "value": 21, "unit": "PCT", "period": "current"},
+          {"metric": "direct customer revenue share 2", "value": 17, "unit": "PCT", "period": "current"},
+          {"metric": "direct customer revenue share 3", "value": 16, "unit": "PCT", "period": "current"}
+        ],
+        "macro_variable": null,
+        "salience": "primary"
+      }
+    ],
+    "chunk-04-geographic-mix": [
+      {
+        "fact_id": "fact-04-01",
+        "canonical_statement": "NVIDIA generates significant revenue from a limited number of indirect customers, some individually 10% or more of revenue.",
+        "evidence_span": "We generate a significant amount of our revenue from a limited number of indirect customers, some individually representing 10% or more of our revenue",
+        "allowed_subjects": ["MARKET_STRUCTURE"],
+        "direction": "NEUTRAL",
+        "magnitude_qualifier": "MODERATE",
+        "magnitude_basis": "qualitative",
+        "acceptable_natures": ["STRUCTURAL", "RISK_FLAG"],
+        "period": {"current": "Q1 FY2027", "prior": null},
+        "numeric_facts": [
+          {"metric": "indirect customer individual revenue threshold", "value": 10, "unit": "PCT", "period": "current"}
+        ],
+        "macro_variable": null,
+        "salience": "primary"
+      },
+      {
+        "fact_id": "fact-04-02",
+        "canonical_statement": "One AI research and deployment company contributed a meaningful amount of revenue through cloud services purchases.",
+        "evidence_span": "one AI research and deployment company contributed to a meaningful amount of our revenue by purchasing cloud services from our customers",
+        "allowed_subjects": ["DEMAND_SIGNAL", "MARKET_STRUCTURE"],
+        "direction": "INCREASE",
+        "magnitude_qualifier": "MODERATE",
+        "magnitude_basis": "qualitative",
+        "acceptable_natures": ["REALIZED"],
+        "period": {"current": "Q1 FY2027", "prior": null},
+        "numeric_facts": [],
+        "macro_variable": null,
+        "salience": "secondary"
+      },
+      {
+        "fact_id": "fact-04-03",
+        "canonical_statement": "Revenue from customers headquartered outside the United States decreased from 42% to 22% of total revenue.",
+        "evidence_span": "Revenue from sales to customers headquartered outside the United States accounted for 22% of total revenue for the first quarter of fiscal year 2027 and 42% for the first quarter of fiscal year 2026",
+        "allowed_subjects": ["MARKET_STRUCTURE", "DEMAND_SIGNAL"],
+        "direction": "DECREASE",
+        "magnitude_qualifier": "STRONG",
+        "magnitude_basis": "qualitative",
+        "acceptable_natures": ["REALIZED"],
+        "period": {"current": "Q1 FY2027", "prior": "Q1 FY2026"},
+        "numeric_facts": [
+          {"metric": "non-US headquartered customer revenue share", "value": 22, "unit": "PCT", "period": "current"},
+          {"metric": "non-US headquartered customer revenue share", "value": 42, "unit": "PCT", "period": "prior"}
+        ],
+        "macro_variable": null,
+        "salience": "primary"
+      }
+    ],
+    "chunk-05-gross-margin": [
+      {
+        "fact_id": "fact-05-01",
+        "canonical_statement": "Gross margin increased to 74.9% from 60.5% because the prior year included an H20 inventory charge.",
+        "evidence_span": "Gross margin increased to 74.9% for the first quarter of fiscal year 2027 compared to 60.5% for the first quarter of fiscal year 2026",
+        "allowed_subjects": ["FINANCIAL_HEALTH", "COST_SIGNAL"],
+        "direction": "INCREASE",
+        "magnitude_qualifier": "STRONG",
+        "magnitude_basis": "qualitative",
+        "acceptable_natures": ["REALIZED"],
+        "period": {"current": "Q1 FY2027", "prior": "Q1 FY2026"},
+        "numeric_facts": [
+          {"metric": "gross margin", "value": 74.9, "unit": "PCT", "period": "current"},
+          {"metric": "gross margin", "value": 60.5, "unit": "PCT", "period": "prior"}
+        ],
+        "macro_variable": null,
+        "salience": "primary"
+      },
+      {
+        "fact_id": "fact-05-02",
+        "canonical_statement": "The prior year's $4.5 billion H20 excess inventory and purchase obligations charge depressed gross margin.",
+        "evidence_span": "prior year's $4.5 billion charge associated with H20 excess inventory and purchase obligations",
+        "allowed_subjects": ["COST_SIGNAL"],
+        "direction": "DECREASE",
+        "magnitude_qualifier": "STRONG",
+        "magnitude_basis": "qualitative",
+        "acceptable_natures": ["REALIZED"],
+        "period": {"current": "Q1 FY2027", "prior": "Q1 FY2026"},
+        "numeric_facts": [
+          {"metric": "H20 excess inventory and purchase obligations charge", "value": 4.5, "unit": "USD_BN", "period": "prior"}
+        ],
+        "macro_variable": null,
+        "salience": "primary"
+      },
+      {
+        "fact_id": "fact-05-03",
+        "canonical_statement": "Inventory and excess purchase obligation provisions fell to $1.1 billion from $5.3 billion.",
+        "evidence_span": "Provisions for inventory and excess inventory purchase obligations totaled $1.1 billion and $5.3 billion for the first quarter of fiscal years 2027 and 2026, respectively",
+        "allowed_subjects": ["COST_SIGNAL"],
+        "direction": "DECREASE",
+        "magnitude_qualifier": "EXTREME",
+        "magnitude_basis": "qualitative",
+        "acceptable_natures": ["REALIZED"],
+        "period": {"current": "Q1 FY2027", "prior": "Q1 FY2026"},
+        "numeric_facts": [
+          {"metric": "inventory and excess purchase obligation provisions", "value": 1.1, "unit": "USD_BN", "period": "current"},
+          {"metric": "inventory and excess purchase obligation provisions", "value": 5.3, "unit": "USD_BN", "period": "prior"}
+        ],
+        "macro_variable": null,
+        "salience": "secondary"
+      },
+      {
+        "fact_id": "fact-05-04",
+        "canonical_statement": "Previously reserved inventory sales and excess purchase obligation settlements released $103 million and $436 million of provisions.",
+        "evidence_span": "Sales of previously reserved inventory and settlements of excess inventory purchase obligations resulted in a provision release of $103 million and $436 million, respectively",
+        "allowed_subjects": ["COST_SIGNAL", "FINANCIAL_HEALTH"],
+        "direction": "DECREASE",
+        "magnitude_qualifier": "MODERATE",
+        "magnitude_basis": "qualitative",
+        "acceptable_natures": ["REALIZED"],
+        "period": {"current": "Q1 FY2027", "prior": null},
+        "numeric_facts": [
+          {"metric": "previously reserved inventory provision release", "value": 103, "unit": "USD_MN", "period": "current"},
+          {"metric": "excess inventory purchase obligations provision release", "value": 436, "unit": "USD_MN", "period": "current"}
+        ],
+        "macro_variable": null,
+        "salience": "secondary"
+      }
+    ],
+    "chunk-06-operating-expenses": [
+      {
+        "fact_id": "fact-06-01",
+        "canonical_statement": "Research and development expense increased 58% year over year to $6.321 billion in Q1 FY2027.",
+        "evidence_span": "Research and development expense was $6.321 billion for the three months ended April 26, 2026, compared with $3.989 billion for the three months ended April 27, 2025, an increase of $2.332 billion, or 58%",
+        "allowed_subjects": ["COST_SIGNAL"],
+        "direction": "INCREASE",
+        "magnitude_qualifier": "STRONG",
+        "magnitude_basis": "numeric",
+        "acceptable_natures": ["REALIZED"],
+        "period": {"current": "Q1 FY2027", "prior": "Q1 FY2026"},
+        "numeric_facts": [
+          {"metric": "R&D expense", "value": 6.321, "unit": "USD_BN", "period": "current"},
+          {"metric": "R&D expense", "value": 3.989, "unit": "USD_BN", "period": "prior"},
+          {"metric": "R&D expense", "value": 2.332, "unit": "USD_BN", "period": "change"},
+          {"metric": "R&D expense", "value": 58, "unit": "PCT", "period": "change_pct"}
+        ],
+        "macro_variable": null,
+        "salience": "primary"
+      },
+      {
+        "fact_id": "fact-06-02",
+        "canonical_statement": "Sales, general and administrative expense increased 25% year over year to $1.300 billion in Q1 FY2027.",
+        "evidence_span": "Sales, general and administrative expense was $1.300 billion compared with $1.041 billion, an increase of $259 million, or 25%",
+        "allowed_subjects": ["COST_SIGNAL"],
+        "direction": "INCREASE",
+        "magnitude_qualifier": "MODERATE",
+        "magnitude_basis": "numeric",
+        "acceptable_natures": ["REALIZED"],
+        "period": {"current": "Q1 FY2027", "prior": "Q1 FY2026"},
+        "numeric_facts": [
+          {"metric": "SG&A expense", "value": 1.300, "unit": "USD_BN", "period": "current"},
+          {"metric": "SG&A expense", "value": 1.041, "unit": "USD_BN", "period": "prior"},
+          {"metric": "SG&A expense", "value": 259, "unit": "USD_MN", "period": "change"},
+          {"metric": "SG&A expense", "value": 25, "unit": "PCT", "period": "change_pct"}
+        ],
+        "macro_variable": null,
+        "salience": "secondary"
+      },
+      {
+        "fact_id": "fact-06-03",
+        "canonical_statement": "Total operating expenses increased 52% year over year to $7.621 billion in Q1 FY2027.",
+        "evidence_span": "Total operating expenses were $7.621 billion compared with $5.030 billion, an increase of $2.591 billion, or 52%",
+        "allowed_subjects": ["COST_SIGNAL"],
+        "direction": "INCREASE",
+        "magnitude_qualifier": "STRONG",
+        "magnitude_basis": "numeric",
+        "acceptable_natures": ["REALIZED"],
+        "period": {"current": "Q1 FY2027", "prior": "Q1 FY2026"},
+        "numeric_facts": [
+          {"metric": "Total operating expenses", "value": 7.621, "unit": "USD_BN", "period": "current"},
+          {"metric": "Total operating expenses", "value": 5.030, "unit": "USD_BN", "period": "prior"},
+          {"metric": "Total operating expenses", "value": 2.591, "unit": "USD_BN", "period": "change"},
+          {"metric": "Total operating expenses", "value": 52, "unit": "PCT", "period": "change_pct"}
+        ],
+        "macro_variable": null,
+        "salience": "primary"
+      },
+      {
+        "fact_id": "fact-06-04",
+        "canonical_statement": "Compute and infrastructure costs rose 112% year over year, a primary driver of R&D growth.",
+        "evidence_span": "a 112% increase in compute and infrastructure",
+        "allowed_subjects": ["COST_SIGNAL"],
+        "direction": "INCREASE",
+        "magnitude_qualifier": "EXTREME",
+        "magnitude_basis": "numeric",
+        "acceptable_natures": ["REALIZED"],
+        "period": {"current": "Q1 FY2027", "prior": "Q1 FY2026"},
+        "numeric_facts": [
+          {"metric": "compute and infrastructure cost", "value": 112, "unit": "PCT", "period": "change_pct"}
+        ],
+        "macro_variable": null,
+        "salience": "secondary"
+      },
+      {
+        "fact_id": "fact-06-05",
+        "canonical_statement": "Compensation and benefits rose 31% year over year, reflecting employee growth.",
+        "evidence_span": "a 31% increase in compensation and benefits",
+        "allowed_subjects": ["COST_SIGNAL"],
+        "direction": "INCREASE",
+        "magnitude_qualifier": "STRONG",
+        "magnitude_basis": "numeric",
+        "acceptable_natures": ["REALIZED"],
+        "period": {"current": "Q1 FY2027", "prior": "Q1 FY2026"},
+        "numeric_facts": [
+          {"metric": "compensation and benefits", "value": 31, "unit": "PCT", "period": "change_pct"}
+        ],
+        "macro_variable": null,
+        "salience": "secondary"
+      },
+      {
+        "fact_id": "fact-06-06",
+        "canonical_statement": "Engineering development materials costs rose 204% year over year for new product introductions.",
+        "evidence_span": "a 204% increase in engineering development materials for new product introductions",
+        "allowed_subjects": ["COST_SIGNAL"],
+        "direction": "INCREASE",
+        "magnitude_qualifier": "EXTREME",
+        "magnitude_basis": "numeric",
+        "acceptable_natures": ["REALIZED"],
+        "period": {"current": "Q1 FY2027", "prior": "Q1 FY2026"},
+        "numeric_facts": [
+          {"metric": "engineering development materials", "value": 204, "unit": "PCT", "period": "change_pct"}
+        ],
+        "macro_variable": null,
+        "salience": "secondary"
+      }
+    ],
+    "chunk-07-investment-gains-tax": [
+      {
+        "fact_id": "fact-07-01",
+        "canonical_statement": "Interest income increased to $540 million from $515 million.",
+        "evidence_span": "Interest income was $540 million for the first quarter of fiscal year 2027 compared with $515 million for the first quarter of fiscal year 2026",
+        "allowed_subjects": ["MACRO_EXPOSURE", "FINANCIAL_HEALTH"],
+        "direction": "INCREASE",
+        "magnitude_qualifier": "WEAK",
+        "magnitude_basis": "qualitative",
+        "acceptable_natures": ["REALIZED"],
+        "period": {"current": "Q1 FY2027", "prior": "Q1 FY2026"},
+        "numeric_facts": [
+          {"metric": "interest income", "value": 540, "unit": "USD_MN", "period": "current"},
+          {"metric": "interest income", "value": 515, "unit": "USD_MN", "period": "prior"}
+        ],
+        "macro_variable": "RATE",
+        "salience": "secondary"
+      },
+      {
+        "fact_id": "fact-07-02",
+        "canonical_statement": "Interest expense increased to $102 million from $63 million.",
+        "evidence_span": "Interest expense was $102 million compared with $63 million",
+        "allowed_subjects": ["MACRO_EXPOSURE", "COST_SIGNAL"],
+        "direction": "INCREASE",
+        "magnitude_qualifier": "MODERATE",
+        "magnitude_basis": "qualitative",
+        "acceptable_natures": ["REALIZED"],
+        "period": {"current": "Q1 FY2027", "prior": "Q1 FY2026"},
+        "numeric_facts": [
+          {"metric": "interest expense", "value": 102, "unit": "USD_MN", "period": "current"},
+          {"metric": "interest expense", "value": 63, "unit": "USD_MN", "period": "prior"}
+        ],
+        "macro_variable": "RATE",
+        "salience": "secondary"
+      },
+      {
+        "fact_id": "fact-07-03",
+        "canonical_statement": "Other income swung to $15.929 billion from a prior other expense of $180 million.",
+        "evidence_span": "Other income was $15.929 billion compared with other expense of $180 million",
+        "allowed_subjects": ["FINANCIAL_HEALTH"],
+        "direction": "INCREASE",
+        "magnitude_qualifier": "EXTREME",
+        "magnitude_basis": "qualitative",
+        "acceptable_natures": ["REALIZED"],
+        "period": {"current": "Q1 FY2027", "prior": "Q1 FY2026"},
+        "numeric_facts": [
+          {"metric": "other income", "value": 15.929, "unit": "USD_BN", "period": "current"},
+          {"metric": "other expense", "value": 180, "unit": "USD_MN", "period": "prior"}
+        ],
+        "macro_variable": null,
+        "salience": "primary"
+      },
+      {
+        "fact_id": "fact-07-04",
+        "canonical_statement": "Total other income, net, increased to $16.367 billion from $272 million.",
+        "evidence_span": "Total other income, net, was $16.367 billion compared with $272 million",
+        "allowed_subjects": ["FINANCIAL_HEALTH"],
+        "direction": "INCREASE",
+        "magnitude_qualifier": "EXTREME",
+        "magnitude_basis": "qualitative",
+        "acceptable_natures": ["REALIZED"],
+        "period": {"current": "Q1 FY2027", "prior": "Q1 FY2026"},
+        "numeric_facts": [
+          {"metric": "total other income, net", "value": 16.367, "unit": "USD_BN", "period": "current"},
+          {"metric": "total other income, net prior", "value": 272, "unit": "USD_MN", "period": "prior"}
+        ],
+        "macro_variable": null,
+        "salience": "primary"
+      },
+      {
+        "fact_id": "fact-07-05",
+        "canonical_statement": "Other income change was primarily driven by $13.4 billion of publicly-held equity gains and $2.6 billion of non-marketable equity gains.",
+        "evidence_span": "primarily driven by unrealized gains on investments in publicly-held equity securities of $13.4 billion and non-marketable equity securities of $2.6 billion",
+        "allowed_subjects": ["FINANCIAL_HEALTH"],
+        "direction": "INCREASE",
+        "magnitude_qualifier": "EXTREME",
+        "magnitude_basis": "qualitative",
+        "acceptable_natures": ["REALIZED"],
+        "period": {"current": "Q1 FY2027", "prior": null},
+        "numeric_facts": [
+          {"metric": "publicly-held equity securities unrealized gains", "value": 13.4, "unit": "USD_BN", "period": "current"},
+          {"metric": "non-marketable equity securities unrealized gains", "value": 2.6, "unit": "USD_BN", "period": "current"}
+        ],
+        "macro_variable": null,
+        "salience": "primary"
+      },
+      {
+        "fact_id": "fact-07-06",
+        "canonical_statement": "Income tax expense increased to $11.6 billion from $3.1 billion.",
+        "evidence_span": "Income tax expense was $11.6 billion and $3.1 billion for the first quarter of fiscal years 2027 and 2026, respectively",
+        "allowed_subjects": ["COST_SIGNAL"],
+        "direction": "INCREASE",
+        "magnitude_qualifier": "EXTREME",
+        "magnitude_basis": "qualitative",
+        "acceptable_natures": ["REALIZED"],
+        "period": {"current": "Q1 FY2027", "prior": "Q1 FY2026"},
+        "numeric_facts": [
+          {"metric": "income tax expense", "value": 11.6, "unit": "USD_BN", "period": "current"},
+          {"metric": "income tax expense", "value": 3.1, "unit": "USD_BN", "period": "prior"}
+        ],
+        "macro_variable": null,
+        "salience": "secondary"
+      }
+    ],
+    "chunk-08-capital-return": [
+      {
+        "fact_id": "fact-08-01",
+        "canonical_statement": "NVIDIA repurchased 108 million shares for $20.2 billion in Q1 FY2027.",
+        "evidence_span": "we repurchased 108 million shares of our common stock for $20.2 billion",
+        "allowed_subjects": ["CAPITAL_ALLOCATION"],
+        "direction": "INCREASE",
+        "magnitude_qualifier": "EXTREME",
+        "magnitude_basis": "qualitative",
+        "acceptable_natures": ["REALIZED"],
+        "period": {"current": "Q1 FY2027", "prior": null},
+        "numeric_facts": [
+          {"metric": "shares repurchased", "value": 108, "unit": "SHARES_MN", "period": "current"},
+          {"metric": "share repurchase value", "value": 20.2, "unit": "USD_BN", "period": "current"}
+        ],
+        "macro_variable": null,
+        "salience": "primary"
+      },
+      {
+        "fact_id": "fact-08-02",
+        "canonical_statement": "NVIDIA had $38.5 billion of remaining repurchase authorization as of April 26, 2026.",
+        "evidence_span": "we were authorized, subject to certain specifications, to repurchase up to $38.5 billion of our common stock",
+        "allowed_subjects": ["CAPITAL_ALLOCATION"],
+        "direction": "NEUTRAL",
+        "magnitude_qualifier": "STRONG",
+        "magnitude_basis": "qualitative",
+        "acceptable_natures": ["REALIZED"],
+        "period": {"current": "Q1 FY2027", "prior": null},
+        "numeric_facts": [
+          {"metric": "remaining repurchase authorization", "value": 38.5, "unit": "USD_BN", "period": "current"}
+        ],
+        "macro_variable": null,
+        "salience": "secondary"
+      },
+      {
+        "fact_id": "fact-08-03",
+        "canonical_statement": "The board approved an additional $80.0 billion share repurchase authorization.",
+        "evidence_span": "our Board of Directors approved an additional $80.0 billion in share repurchase authorization",
+        "allowed_subjects": ["CAPITAL_ALLOCATION"],
+        "direction": "INCREASE",
+        "magnitude_qualifier": "EXTREME",
+        "magnitude_basis": "qualitative",
+        "acceptable_natures": ["REALIZED"],
+        "period": {"current": "Q1 FY2027", "prior": null},
+        "numeric_facts": [
+          {"metric": "additional share repurchase authorization", "value": 80.0, "unit": "USD_BN", "period": "current"}
+        ],
+        "macro_variable": null,
+        "salience": "primary"
+      },
+      {
+        "fact_id": "fact-08-04",
+        "canonical_statement": "NVIDIA paid $243 million of cash dividends in Q1 FY2027.",
+        "evidence_span": "We paid cash dividends to our shareholders of $243 million during the first quarter of fiscal year 2027",
+        "allowed_subjects": ["CAPITAL_ALLOCATION"],
+        "direction": "INCREASE",
+        "magnitude_qualifier": "MODERATE",
+        "magnitude_basis": "qualitative",
+        "acceptable_natures": ["REALIZED"],
+        "period": {"current": "Q1 FY2027", "prior": null},
+        "numeric_facts": [
+          {"metric": "cash dividends paid", "value": 243, "unit": "USD_MN", "period": "current"}
+        ],
+        "macro_variable": null,
+        "salience": "secondary"
+      },
+      {
+        "fact_id": "fact-08-05",
+        "canonical_statement": "NVIDIA increased its quarterly cash dividend from $0.01 per share to $0.25 per share.",
+        "evidence_span": "we increased our quarterly cash dividend from $0.01 per share to $0.25 per share",
+        "allowed_subjects": ["CAPITAL_ALLOCATION"],
+        "direction": "INCREASE",
+        "magnitude_qualifier": "EXTREME",
+        "magnitude_basis": "qualitative",
+        "acceptable_natures": ["REALIZED"],
+        "period": {"current": "Q1 FY2027", "prior": "Q1 FY2026"},
+        "numeric_facts": [
+          {"metric": "quarterly cash dividend per share", "value": 0.25, "unit": "USD_PER_SHARE", "period": "current"},
+          {"metric": "quarterly cash dividend per share", "value": 0.01, "unit": "USD_PER_SHARE", "period": "prior"}
+        ],
+        "macro_variable": null,
+        "salience": "primary"
+      }
+    ],
+    "chunk-09-h200-china-licenses": [
+      {
+        "fact_id": "fact-09-01",
+        "canonical_statement": "The US government granted licenses allowing small H200 shipments to specific China-based customers.",
+        "evidence_span": "the USG granted licenses that would allow us to ship small amounts of H200 products to specific China-based customers",
+        "allowed_subjects": ["SUPPLY_SIGNAL"],
+        "direction": "INCREASE",
+        "magnitude_qualifier": "WEAK",
+        "magnitude_basis": "qualitative",
+        "acceptable_natures": ["GUIDANCE", "REALIZED"],
+        "period": {"current": "Q1 FY2027", "prior": null},
+        "numeric_facts": [],
+        "macro_variable": null,
+        "salience": "secondary"
+      },
+      {
+        "fact_id": "fact-09-02",
+        "canonical_statement": "NVIDIA has not generated revenue under the H200 licensing program to date.",
+        "evidence_span": "To date, we have not generated any revenue under the H200 licensing program",
+        "allowed_subjects": ["FINANCIAL_HEALTH", "DEMAND_SIGNAL"],
+        "direction": "NEUTRAL",
+        "magnitude_qualifier": "MODERATE",
+        "magnitude_basis": "qualitative",
+        "acceptable_natures": ["REALIZED"],
+        "period": {"current": "Q1 FY2027", "prior": null},
+        "numeric_facts": [],
+        "macro_variable": null,
+        "salience": "primary"
+      },
+      {
+        "fact_id": "fact-09-03",
+        "canonical_statement": "NVIDIA does not know whether H200 imports will be allowed into China.",
+        "evidence_span": "do not yet know whether any imports will be allowed into China",
+        "allowed_subjects": ["SUPPLY_SIGNAL", "GOVERNANCE"],
+        "direction": "NEUTRAL",
+        "magnitude_qualifier": "MODERATE",
+        "magnitude_basis": "qualitative",
+        "acceptable_natures": ["RISK_FLAG"],
+        "period": {"current": "Q1 FY2027", "prior": null},
+        "numeric_facts": [],
+        "macro_variable": null,
+        "salience": "secondary"
+      },
+      {
+        "fact_id": "fact-09-04",
+        "canonical_statement": "Licensed H200 shipments must go through a US inspection process before shipment.",
+        "evidence_span": "The license requires that the H200s go through an inspection process in the United States prior to any shipment to the customer",
+        "allowed_subjects": ["SUPPLY_SIGNAL", "COST_SIGNAL"],
+        "direction": "INCREASE",
+        "magnitude_qualifier": "WEAK",
+        "magnitude_basis": "qualitative",
+        "acceptable_natures": ["RISK_FLAG"],
+        "period": {"current": "Q1 FY2027", "prior": null},
+        "numeric_facts": [],
+        "macro_variable": null,
+        "salience": "secondary"
+      },
+      {
+        "fact_id": "fact-09-05",
+        "canonical_statement": "Any H200 shipped under the licensing program will face a 25% tariff upon US importation.",
+        "evidence_span": "any H200 shipped under the new licensing program will be subject to a 25% tariff upon importation into the United States",
+        "allowed_subjects": ["COST_SIGNAL", "PRICING_SIGNAL"],
+        "direction": "INCREASE",
+        "magnitude_qualifier": "MODERATE",
+        "magnitude_basis": "numeric",
+        "acceptable_natures": ["RISK_FLAG"],
+        "period": {"current": "Q1 FY2027", "prior": null},
+        "numeric_facts": [
+          {"metric": "H200 tariff", "value": 25, "unit": "PCT", "period": "change_pct"}
+        ],
+        "macro_variable": null,
+        "salience": "primary"
+      },
+      {
+        "fact_id": "fact-09-06",
+        "canonical_statement": "NVIDIA may be unable to pass H200 tariffs to customers if it sells licensed products into China.",
+        "evidence_span": "we may not be able to pass along all or any of the tariff to our customers",
+        "allowed_subjects": ["PRICING_SIGNAL", "COST_SIGNAL"],
+        "direction": "DECREASE",
+        "magnitude_qualifier": "MODERATE",
+        "magnitude_basis": "qualitative",
+        "acceptable_natures": ["RISK_FLAG"],
+        "period": {"current": "Q1 FY2027", "prior": null},
+        "numeric_facts": [],
+        "macro_variable": null,
+        "salience": "secondary"
+      },
+      {
+        "fact_id": "fact-09-07",
+        "canonical_statement": "Licensed China sales could expose NVIDIA to litigation, increased costs, and harmed competitive position.",
+        "evidence_span": "may be subject to litigation, increased costs, and a harmed competitive position",
+        "allowed_subjects": ["COST_SIGNAL", "COMPETITIVE_POSITION"],
+        "direction": "DECREASE",
+        "magnitude_qualifier": "MODERATE",
+        "magnitude_basis": "qualitative",
+        "acceptable_natures": ["RISK_FLAG"],
+        "period": {"current": "Q1 FY2027", "prior": null},
+        "numeric_facts": [],
+        "macro_variable": null,
+        "salience": "secondary"
+      }
+    ],
+    "chunk-10-export-controls-risk": [
+      {
+        "fact_id": "fact-10-01",
+        "canonical_statement": "China export controls are complex and cover processing performance, performance density, interconnect bandwidth, and memory bandwidth.",
+        "evidence_span": "The export controls applicable to China are complex and address a variety of parameters, including total processing performance, performance density, interconnect bandwidth, and memory bandwidth",
+        "allowed_subjects": ["GOVERNANCE", "MARKET_STRUCTURE"],
+        "direction": "NEUTRAL",
+        "magnitude_qualifier": "MODERATE",
+        "magnitude_basis": "qualitative",
+        "acceptable_natures": ["STRUCTURAL", "RISK_FLAG"],
+        "period": {"current": "Q1 FY2027", "prior": null},
+        "numeric_facts": [],
+        "macro_variable": null,
+        "salience": "secondary"
+      },
+      {
+        "fact_id": "fact-10-02",
+        "canonical_statement": "NVIDIA cannot create and deliver a competitive China data center product approved by both US and Chinese governments.",
+        "evidence_span": "we are unable to create and deliver a competitive product for China's data center market that receives approval from both the USG and the Chinese government",
+        "allowed_subjects": ["COMPETITIVE_POSITION", "SUPPLY_SIGNAL"],
+        "direction": "DECREASE",
+        "magnitude_qualifier": "EXTREME",
+        "magnitude_basis": "qualitative",
+        "acceptable_natures": ["RISK_FLAG"],
+        "period": {"current": "Q1 FY2027", "prior": null},
+        "numeric_facts": [],
+        "macro_variable": null,
+        "salience": "primary"
+      },
+      {
+        "fact_id": "fact-10-03",
+        "canonical_statement": "NVIDIA was able to ship uncontrolled gaming and workstation GPUs to China.",
+        "evidence_span": "we were able to ship uncontrolled products to China, such as gaming and workstation GPUs",
+        "allowed_subjects": ["SUPPLY_SIGNAL"],
+        "direction": "INCREASE",
+        "magnitude_qualifier": "WEAK",
+        "magnitude_basis": "qualitative",
+        "acceptable_natures": ["REALIZED"],
+        "period": {"current": "Q1 FY2027", "prior": null},
+        "numeric_facts": [],
+        "macro_variable": null,
+        "salience": "secondary"
+      },
+      {
+        "fact_id": "fact-10-04",
+        "canonical_statement": "NVIDIA was effectively foreclosed from competing in China's data center computing market.",
+        "evidence_span": "we were effectively foreclosed from competing in China's data center computing market",
+        "allowed_subjects": ["COMPETITIVE_POSITION", "DEMAND_SIGNAL"],
+        "direction": "DECREASE",
+        "magnitude_qualifier": "EXTREME",
+        "magnitude_basis": "qualitative",
+        "acceptable_natures": ["RISK_FLAG"],
+        "period": {"current": "Q1 FY2027", "prior": null},
+        "numeric_facts": [],
+        "macro_variable": null,
+        "salience": "primary"
+      },
+      {
+        "fact_id": "fact-10-05",
+        "canonical_statement": "NVIDIA's foreclosure helped competitors build larger developer and customer ecosystems worldwide.",
+        "evidence_span": "our effective foreclosure helped competitors build larger developer and customer ecosystems to challenge us worldwide",
+        "allowed_subjects": ["COMPETITIVE_POSITION"],
+        "direction": "DECREASE",
+        "magnitude_qualifier": "STRONG",
+        "magnitude_basis": "qualitative",
+        "acceptable_natures": ["RISK_FLAG"],
+        "period": {"current": "Q1 FY2027", "prior": null},
+        "numeric_facts": [],
+        "macro_variable": null,
+        "salience": "primary"
+      },
+      {
+        "fact_id": "fact-10-06",
+        "canonical_statement": "If NVIDIA cannot return with an approved China data center system, the lost opportunity and competitor benefit will materially harm business, operating results, and financial condition.",
+        "evidence_span": "our lost opportunity and the benefit to competitors will have a material and adverse impact on our business, operating results, and financial condition",
+        "allowed_subjects": ["COMPETITIVE_POSITION", "FINANCIAL_HEALTH"],
+        "direction": "DECREASE",
+        "magnitude_qualifier": "EXTREME",
+        "magnitude_basis": "qualitative",
+        "acceptable_natures": ["RISK_FLAG"],
+        "period": {"current": "Q1 FY2027", "prior": null},
+        "numeric_facts": [],
+        "macro_variable": null,
+        "salience": "primary"
+      }
+    ]
+  }
+}

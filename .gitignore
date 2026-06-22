@@ -4,6 +4,8 @@ __pycache__/
 .ruff_cache/
 .mypy_cache/
 .coverage
+.env
+.env.*
 htmlcov/
 dist/
 build/
@@ -11,3 +13,4 @@ build/
 .DS_Store
 REVIEW-*.md
 .auto-loop/
+data/benchmark/results/*.json
