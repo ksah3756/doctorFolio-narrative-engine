@@ -11,4 +11,6 @@ dist/
 build/
 *.egg-info/
 .DS_Store
+REVIEW-*.md
+.auto-loop/
 data/benchmark/results/*.json
