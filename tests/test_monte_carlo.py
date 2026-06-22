@@ -3,6 +3,8 @@ from datetime import UTC, datetime
 
 import numpy as np
 import pytest
+from hypothesis import given
+from hypothesis import strategies as st
 from numpy.random import Generator
 
 from dcf_engine import monte_carlo as monte_carlo_module
@@ -14,6 +16,7 @@ from dcf_engine.loading import LOADING
 from dcf_engine.monte_carlo import (
     MonteCarloConfig,
     _shifted_mu,
+    mc_iteration,
     mc_iteration_with_validation,
     mc_run,
 )
@@ -93,6 +96,98 @@ def test_shifted_mu_uses_canonical_financial_strength_loading() -> None:
         assumption.base_mu
         + LOADING["WACC"]["FinancialStrength"] * assumption.shift_scale.center
     )
+
+
+def test_mc_iteration_reverts_excess_return_mu_toward_sector_median() -> None:
+    assumption = _assumption("OPERATING_MARGIN", 0.58, 0.0, "normal")
+
+    current = mc_iteration(
+        factor_states={},
+        assumptions=[assumption],
+        stage="growth",
+        regime="normal",
+        company=_company(),
+        rng=np.random.default_rng(11),
+        t_year=0.0,
+    )
+    reverted = mc_iteration(
+        factor_states={},
+        assumptions=[assumption],
+        stage="growth",
+        regime="normal",
+        company=_company(),
+        rng=np.random.default_rng(11),
+        t_year=10.0,
+    )
+
+    assert current["OPERATING_MARGIN"] == pytest.approx(assumption.base_mu)
+    assert 0.28 < reverted["OPERATING_MARGIN"] < assumption.base_mu
+
+
+def test_mc_iteration_does_not_revert_non_target_mu() -> None:
+    assumption = _assumption("WACC", 0.12, 0.0, "normal")
+
+    sampled = mc_iteration(
+        factor_states={},
+        assumptions=[assumption],
+        stage="growth",
+        regime="normal",
+        company=_company(),
+        rng=np.random.default_rng(11),
+        t_year=10.0,
+    )
+
+    assert sampled["WACC"] == pytest.approx(assumption.base_mu)
+
+
+def test_mc_iteration_reverts_mature_roic_to_wacc_floor() -> None:
+    assumption = _assumption("ROIC", 0.05, 0.0, "normal")
+    company = _company() | {"wacc_estimate": 0.20}
+
+    sampled = mc_iteration(
+        factor_states={},
+        assumptions=[assumption],
+        stage="mature",
+        regime="normal",
+        company=company,
+        rng=np.random.default_rng(11),
+        t_year=10.0,
+    )
+
+    assert 0.16 < sampled["ROIC"] < company["wacc_estimate"]
+
+
+@given(
+    base_mu=st.floats(min_value=0.30, max_value=0.90, allow_nan=False, allow_infinity=False),
+    t_early=st.floats(min_value=0.0, max_value=5.0, allow_nan=False, allow_infinity=False),
+    delta=st.floats(min_value=0.01, max_value=10.0, allow_nan=False, allow_infinity=False),
+)
+def test_mc_iteration_mean_reversion_is_monotonic_toward_target(
+    base_mu: float, t_early: float, delta: float
+) -> None:
+    assumption = _assumption("OPERATING_MARGIN", base_mu, 0.0, "normal")
+    company = _company()
+
+    early = mc_iteration(
+        factor_states={},
+        assumptions=[assumption],
+        stage="growth",
+        regime="normal",
+        company=company,
+        rng=np.random.default_rng(11),
+        t_year=t_early,
+    )
+    later = mc_iteration(
+        factor_states={},
+        assumptions=[assumption],
+        stage="growth",
+        regime="normal",
+        company=company,
+        rng=np.random.default_rng(11),
+        t_year=t_early + delta,
+    )
+
+    assert 0.28 <= later["OPERATING_MARGIN"] <= early["OPERATING_MARGIN"] <= base_mu
 
 
 def _assumption(name: str, mu: float, sigma: float, family: DistributionFamily) -> AssumptionState:
