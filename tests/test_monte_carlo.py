@@ -68,7 +68,9 @@ def test_mc_run_reports_outer_indices_for_accepted_samples(
         company: Mapping[str, float],
         rng: Generator,
         max_resample: int,
+        t_year: float,
     ) -> dict[str, float] | None:
+        assert t_year == pytest.approx(MonteCarloConfig().t_year)
         return next(calls)
 
     monkeypatch.setattr(monte_carlo_module, "_iteration_with_rng", fake_iteration_with_rng)
@@ -151,7 +153,7 @@ def test_mc_iteration_reverts_mature_roic_to_wacc_floor() -> None:
         regime="normal",
         company=company,
         rng=np.random.default_rng(11),
-        t_year=10.0,
+        t_year=100.0,
     )
 
     assert 0.16 < sampled["ROIC"] < company["wacc_estimate"]
