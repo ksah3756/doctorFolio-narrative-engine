@@ -14,7 +14,7 @@ from dcf_engine.assumption import AssumptionState
 from dcf_engine.distributions import params_from_moments, sample_distribution
 from dcf_engine.factor import FactorState, Regime
 from dcf_engine.lifecycle import LifecycleStage
-from dcf_engine.loading import apply_constraints, shifted_mu_from_factors
+from dcf_engine.loading import LOADING, apply_constraints, apply_mean_reversion
 from dcf_engine.validation import passes_imputed_roic_check
 
 
@@ -52,6 +52,7 @@ def mc_iteration_with_validation(
             regime=regime,
             company=company,
             rng=rng,
+            t_year=config.t_year,
         )
         if passes_imputed_roic_check(stage, sampled):
             return sampled
@@ -80,6 +81,7 @@ def mc_run(
             company=company,
             rng=rng,
             max_resample=config.max_resample,
+            t_year=config.t_year,
         )
         if sampled is None:
             dropped += 1
@@ -108,6 +110,7 @@ def mc_iteration(
     regime: Regime,
     company: Mapping[str, float],
     rng: Generator,
+    t_year: float = 1.0,
 ) -> dict[str, float]:
     # factor를 먼저 흔들어 narrative 불확실성이 assumption 분포로 전달되게 한다.
     sampled_factors = _sample_factors(factor_states, stage, regime, rng)
@@ -116,6 +119,7 @@ def mc_iteration(
         if not assumption.active:
             continue
         mu = _shifted_mu(assumption, sampled_factors)
+        mu = apply_mean_reversion(assumption.with_mu(mu), t_year=t_year, company=company)
         mu = apply_constraints(mu, assumption, company)
         params = params_from_moments(
             assumption.distribution_family,
@@ -137,6 +141,7 @@ def _iteration_with_rng(
     company: Mapping[str, float],
     rng: Generator,
     max_resample: int,
+    t_year: float,
 ) -> dict[str, float] | None:
     for _ in range(max_resample):
         sampled = mc_iteration(
@@ -146,6 +151,7 @@ def _iteration_with_rng(
             regime=regime,
             company=company,
             rng=rng,
+            t_year=t_year,
         )
         if passes_imputed_roic_check(stage, sampled):
             return sampled
