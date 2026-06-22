@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "discord": {
+      "command": "bun",
+      "args": [
+        "run",
+        "--cwd",
+        "/Users/kimsangho/.claude/plugins/cache/claude-plugins-official/discord/0.0.4",
+        "--shell=bun",
+        "--silent",
+        "start"
+      ]
+    }
+  }
+}
