@@ -173,11 +173,7 @@ def _sample_factors(
 
 
 def _shifted_mu(assumption: AssumptionState, sampled_factors: Mapping[str, float]) -> float:
-    loading = LOADING.get(assumption.name, {})
-    mu_shift = sum(
-        loading[name] * sampled_factors[name] for name in loading if name in sampled_factors
-    )
-    return assumption.base_mu + mu_shift * assumption.shift_scale.center
+    return shifted_mu_from_factors(assumption, sampled_factors)
 
 
 def _transpose_samples(samples: list[dict[str, float]]) -> dict[str, np.ndarray]:

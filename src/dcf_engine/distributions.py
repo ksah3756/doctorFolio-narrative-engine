@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import math
 from collections.abc import Sequence
-from typing import Literal, assert_never
+from typing import Final, Literal, assert_never
 
 from numpy.random import Generator
+
+MIN_BETA_CONCENTRATION: Final = 0.1
 
 type DistributionFamily = Literal[
     "beta",
@@ -22,8 +24,9 @@ def beta_from_moments(mu: float, sigma: float) -> tuple[float, float]:
     _require_finite_positive("sigma", sigma)
     _require_probability("mu", mu)
     variance = min(sigma**2, mu * (1 - mu) * 0.99)
-    concentration = mu * (1 - mu) / variance - 1
-    return max(mu * concentration, 0.1), max((1 - mu) * concentration, 0.1)
+    concentration = max(mu * (1 - mu) / variance - 1, MIN_BETA_CONCENTRATION)
+    # 경계 mu에서도 평균이 뒤집히지 않도록 shape ratio는 입력 mu를 그대로 따른다.
+    return mu * concentration, (1 - mu) * concentration
 
 
 def t_params_from_moments(mu: float, sigma: float, df: int = 7) -> tuple[float, float, int]:

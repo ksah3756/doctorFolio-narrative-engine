@@ -1,0 +1,1100 @@
+{
+  "chunk_count": 10,
+  "cost_per_chunk_usd": 0.0062039999999999994,
+  "latency_ms_p50": 4703.0,
+  "model": "claude-haiku-4-5-20251001",
+  "numeric_consistency_rate": 1.0,
+  "precision": 0.19047619047619047,
+  "prompt_version": "m2.1-v1",
+  "provider": "anthropic",
+  "recall": 0.8,
+  "responses": [
+    {
+      "chunk_id": "chunk-01-revenue-overview",
+      "claims": [
+        {
+          "chunk_ref": "chunk-01-revenue-overview",
+          "claim_id": "chunk-01-revenue-overview-001",
+          "claim_nature": "REALIZED",
+          "claim_subject": "DEMAND_SIGNAL",
+          "claim_text": "Compute & Networking revenue increased from $39.589 billion in Q1 FY2025 to $74.550 billion in Q1 FY2026, representing an 88% year-over-year increase.",
+          "direction": "INCREASE",
+          "extraction_quality": {
+            "entity_consistency": true,
+            "numeric_consistency": true,
+            "temporal_consistency": true,
+            "verbatim_overlap": 0.95
+          },
+          "instrument_type": null,
+          "macro_variable": null,
+          "magnitude_qualifier": "EXTREME",
+          "published_date": "2026-05-20",
+          "source_ref": {
+            "content_source": "10-Q",
+            "discovery_channel": "edgar_api",
+            "source_reliability": 0.95
+          }
+        },
+        {
+          "chunk_ref": "chunk-01-revenue-overview",
+          "claim_id": "chunk-01-revenue-overview-002",
+          "claim_nature": "REALIZED",
+          "claim_subject": "DEMAND_SIGNAL",
+          "claim_text": "Graphics revenue increased from $4.473 billion in Q1 FY2025 to $7.065 billion in Q1 FY2026, representing a 58% year-over-year increase.",
+          "direction": "INCREASE",
+          "extraction_quality": {
+            "entity_consistency": true,
+            "numeric_consistency": true,
+            "temporal_consistency": true,
+            "verbatim_overlap": 0.95
+          },
+          "instrument_type": null,
+          "macro_variable": null,
+          "magnitude_qualifier": "STRONG",
+          "published_date": "2026-05-20",
+          "source_ref": {
+            "content_source": "10-Q",
+            "discovery_channel": "edgar_api",
+            "source_reliability": 0.95
+          }
+        },
+        {
+          "chunk_ref": "chunk-01-revenue-overview",
+          "claim_id": "chunk-01-revenue-overview-003",
+          "claim_nature": "REALIZED",
+          "claim_subject": "DEMAND_SIGNAL",
+          "claim_text": "Total revenue increased from $44.062 billion in Q1 FY2025 to $81.615 billion in Q1 FY2026, representing an 85% year-over-year increase.",
+          "direction": "INCREASE",
+          "extraction_quality": {
+            "entity_consistency": true,
+            "numeric_consistency": true,
+            "temporal_consistency": true,
+            "verbatim_overlap": 0.95
+          },
+          "instrument_type": null,
+          "macro_variable": null,
+          "magnitude_qualifier": "EXTREME",
+          "published_date": "2026-05-20",
+          "source_ref": {
+            "content_source": "10-Q",
+            "discovery_channel": "edgar_api",
+            "source_reliability": 0.95
+          }
+        },
+        {
+          "chunk_ref": "chunk-01-revenue-overview",
+          "claim_id": "chunk-01-revenue-overview-004",
+          "claim_nature": "REALIZED",
+          "claim_subject": "FINANCIAL_HEALTH",
+          "claim_text": "Compute & Networking operating income increased from $22.054 billion in Q1 FY2025 to $53.335 billion in Q1 FY2026, representing a 142% year-over-year increase.",
+          "direction": "INCREASE",
+          "extraction_quality": {
+            "entity_consistency": true,
+            "numeric_consistency": true,
+            "temporal_consistency": true,
+            "verbatim_overlap": 0.95
+          },
+          "instrument_type": null,
+          "macro_variable": null,
+          "magnitude_qualifier": "EXTREME",
+          "published_date": "2026-05-20",
+          "source_ref": {
+            "content_source": "10-Q",
+            "discovery_channel": "edgar_api",
+            "source_reliability": 0.95
+          }
+        },
+        {
+          "chunk_ref": "chunk-01-revenue-overview",
+          "claim_id": "chunk-01-revenue-overview-005",
+          "claim_nature": "REALIZED",
+          "claim_subject": "FINANCIAL_HEALTH",
+          "claim_text": "Graphics operating income increased from $1.640 billion in Q1 FY2025 to $2.941 billion in Q1 FY2026, representing a 79% year-over-year increase.",
+          "direction": "INCREASE",
+          "extraction_quality": {
+            "entity_consistency": true,
+            "numeric_consistency": true,
+            "temporal_consistency": true,
+            "verbatim_overlap": 0.95
+          },
+          "instrument_type": null,
+          "macro_variable": null,
+          "magnitude_qualifier": "STRONG",
+          "published_date": "2026-05-20",
+          "source_ref": {
+            "content_source": "10-Q",
+            "discovery_channel": "edgar_api",
+            "source_reliability": 0.95
+          }
+        },
+        {
+          "chunk_ref": "chunk-01-revenue-overview",
+          "claim_id": "chunk-01-revenue-overview-006",
+          "claim_nature": "REALIZED",
+          "claim_subject": "FINANCIAL_HEALTH",
+          "claim_text": "Total reportable segment operating income increased from $23.694 billion in Q1 FY2025 to $56.276 billion in Q1 FY2026, representing a 138% year-over-year increase.",
+          "direction": "INCREASE",
+          "extraction_quality": {
+            "entity_consistency": true,
+            "numeric_consistency": true,
+            "temporal_consistency": true,
+            "verbatim_overlap": 0.95
+          },
+          "instrument_type": null,
+          "macro_variable": null,
+          "magnitude_qualifier": "EXTREME",
+          "published_date": "2026-05-20",
+          "source_ref": {
+            "content_source": "10-Q",
+            "discovery_channel": "edgar_api",
+            "source_reliability": 0.95
+          }
+        }
+      ],
+      "error": null,
+      "latency_ms": 6572,
+      "schema_valid": true,
+      "usage": {
+        "completion_tokens": 1654,
+        "prompt_tokens": 807
+      }
+    },
+    {
+      "chunk_id": "chunk-02-data-center-demand",
+      "claims": [
+        {
+          "chunk_ref": "chunk-02-data-center-demand",
+          "claim_id": "chunk-02-data-center-demand-001",
+          "claim_nature": "REALIZED",
+          "claim_subject": "DEMAND_SIGNAL",
+          "claim_text": "Data Center products revenue grew year-over-year in Q1 FY2027, driven by Blackwell systems ramp and demand for InfiniBand, Spectrum-X Ethernet, and NVLink solutions",
+          "direction": "INCREASE",
+          "extraction_quality": {
+            "entity_consistency": true,
+            "numeric_consistency": true,
+            "temporal_consistency": true,
+            "verbatim_overlap": 0.92
+          },
+          "instrument_type": null,
+          "macro_variable": null,
+          "magnitude_qualifier": "STRONG",
+          "published_date": "2026-05-20",
+          "source_ref": {
+            "content_source": "10-Q",
+            "discovery_channel": "edgar_api",
+            "source_reliability": 0.95
+          }
+        },
+        {
+          "chunk_ref": "chunk-02-data-center-demand",
+          "claim_id": "chunk-02-data-center-demand-002",
+          "claim_nature": "REALIZED",
+          "claim_subject": "DEMAND_SIGNAL",
+          "claim_text": "Graphics revenue increased year-over-year in Q1 FY2027 driven by sales of Blackwell architecture",
+          "direction": "INCREASE",
+          "extraction_quality": {
+            "entity_consistency": true,
+            "numeric_consistency": true,
+            "temporal_consistency": true,
+            "verbatim_overlap": 0.88
+          },
+          "instrument_type": null,
+          "macro_variable": null,
+          "magnitude_qualifier": "MODERATE",
+          "published_date": "2026-05-20",
+          "source_ref": {
+            "content_source": "10-Q",
+            "discovery_channel": "edgar_api",
+            "source_reliability": 0.95
+          }
+        },
+        {
+          "chunk_ref": "chunk-02-data-center-demand",
+          "claim_id": "chunk-02-data-center-demand-003",
+          "claim_nature": "REALIZED",
+          "claim_subject": "FINANCIAL_HEALTH",
+          "claim_text": "Compute & Networking segment operating income increased year-over-year in Q1 FY2027, benefiting from revenue growth and non-recurrence of $4.5 billion H20 excess inventory and purchase obligation charge from Q1 FY2026",
+          "direction": "INCREASE",
+          "extraction_quality": {
+            "entity_consistency": true,
+            "numeric_consistency": true,
+            "temporal_consistency": true,
+            "verbatim_overlap": 0.89
+          },
+          "instrument_type": null,
+          "macro_variable": null,
+          "magnitude_qualifier": "STRONG",
+          "published_date": "2026-05-20",
+          "source_ref": {
+            "content_source": "10-Q",
+            "discovery_channel": "edgar_api",
+            "source_reliability": 0.95
+          }
+        },
+        {
+          "chunk_ref": "chunk-02-data-center-demand",
+          "claim_id": "chunk-02-data-center-demand-004",
+          "claim_nature": "REALIZED",
+          "claim_subject": "FINANCIAL_HEALTH",
+          "claim_text": "Graphics segment operating income increased year-over-year in Q1 FY2027 driven by revenue growth",
+          "direction": "INCREASE",
+          "extraction_quality": {
+            "entity_consistency": true,
+            "numeric_consistency": true,
+            "temporal_consistency": true,
+            "verbatim_overlap": 0.85
+          },
+          "instrument_type": null,
+          "macro_variable": null,
+          "magnitude_qualifier": "MODERATE",
+          "published_date": "2026-05-20",
+          "source_ref": {
+            "content_source": "10-Q",
+            "discovery_channel": "edgar_api",
+            "source_reliability": 0.95
+          }
+        }
+      ],
+      "error": null,
+      "latency_ms": 4602,
+      "schema_valid": true,
+      "usage": {
+        "completion_tokens": 1084,
+        "prompt_tokens": 796
+      }
+    },
+    {
+      "chunk_id": "chunk-03-customer-concentration",
+      "claims": [
+        {
+          "chunk_ref": "chunk-03-customer-concentration",
+          "claim_id": "chunk-03-customer-concentration-001",
+          "claim_nature": "REALIZED",
+          "claim_subject": "COMPETITIVE_POSITION",
+          "claim_text": "Three direct customers represented 21%, 17%, and 16% of total revenue in Q1 FY2027, collectively 54% of revenue",
+          "direction": "NEUTRAL",
+          "extraction_quality": {
+            "entity_consistency": true,
+            "numeric_consistency": true,
+            "temporal_consistency": true,
+            "verbatim_overlap": 0.92
+          },
+          "instrument_type": null,
+          "macro_variable": null,
+          "magnitude_qualifier": "STRONG",
+          "published_date": "2026-05-20",
+          "source_ref": {
+            "content_source": "10-Q",
+            "discovery_channel": "edgar_api",
+            "source_reliability": 0.95
+          }
+        },
+        {
+          "chunk_ref": "chunk-03-customer-concentration",
+          "claim_id": "chunk-03-customer-concentration-002",
+          "claim_nature": "STRUCTURAL",
+          "claim_subject": "MARKET_STRUCTURE",
+          "claim_text": "Revenue concentration among limited number of direct and indirect customers is a structural trend that may continue",
+          "direction": "NEUTRAL",
+          "extraction_quality": {
+            "entity_consistency": true,
+            "numeric_consistency": true,
+            "temporal_consistency": true,
+            "verbatim_overlap": 0.88
+          },
+          "instrument_type": null,
+          "macro_variable": null,
+          "magnitude_qualifier": "MODERATE",
+          "published_date": "2026-05-20",
+          "source_ref": {
+            "content_source": "10-Q",
+            "discovery_channel": "edgar_api",
+            "source_reliability": 0.95
+          }
+        },
+        {
+          "chunk_ref": "chunk-03-customer-concentration",
+          "claim_id": "chunk-03-customer-concentration-003",
+          "claim_nature": "REALIZED",
+          "claim_subject": "DEMAND_SIGNAL",
+          "claim_text": "Top three direct customers' revenue concentration is primarily attributable to Compute & Networking segment",
+          "direction": "INCREASE",
+          "extraction_quality": {
+            "entity_consistency": true,
+            "numeric_consistency": true,
+            "temporal_consistency": true,
+            "verbatim_overlap": 0.85
+          },
+          "instrument_type": null,
+          "macro_variable": null,
+          "magnitude_qualifier": "STRONG",
+          "published_date": "2026-05-20",
+          "source_ref": {
+            "content_source": "10-Q",
+            "discovery_channel": "edgar_api",
+            "source_reliability": 0.95
+          }
+        }
+      ],
+      "error": null,
+      "latency_ms": 3684,
+      "schema_valid": true,
+      "usage": {
+        "completion_tokens": 759,
+        "prompt_tokens": 753
+      }
+    },
+    {
+      "chunk_id": "chunk-04-geographic-mix",
+      "claims": [
+        {
+          "chunk_ref": "chunk-04-geographic-mix",
+          "claim_id": "chunk-04-geographic-mix-001",
+          "claim_nature": "REALIZED",
+          "claim_subject": "DEMAND_SIGNAL",
+          "claim_text": "Revenue from customers headquartered outside the United States decreased from 42% of total revenue in Q1 FY2026 to 22% in Q1 FY2027",
+          "direction": "DECREASE",
+          "extraction_quality": {
+            "entity_consistency": true,
+            "numeric_consistency": true,
+            "temporal_consistency": true,
+            "verbatim_overlap": 0.92
+          },
+          "instrument_type": null,
+          "macro_variable": null,
+          "magnitude_qualifier": "STRONG",
+          "published_date": "2026-05-20",
+          "source_ref": {
+            "content_source": "10-Q",
+            "discovery_channel": "edgar_api",
+            "source_reliability": 0.95
+          }
+        },
+        {
+          "chunk_ref": "chunk-04-geographic-mix",
+          "claim_id": "chunk-04-geographic-mix-002",
+          "claim_nature": "STRUCTURAL",
+          "claim_subject": "MARKET_STRUCTURE",
+          "claim_text": "A significant portion of revenue is generated from a limited number of indirect customers, with some individually representing 10% or more of total revenue",
+          "direction": "NEUTRAL",
+          "extraction_quality": {
+            "entity_consistency": true,
+            "numeric_consistency": true,
+            "temporal_consistency": true,
+            "verbatim_overlap": 0.88
+          },
+          "instrument_type": null,
+          "macro_variable": null,
+          "magnitude_qualifier": "STRONG",
+          "published_date": "2026-05-20",
+          "source_ref": {
+            "content_source": "10-Q",
+            "discovery_channel": "edgar_api",
+            "source_reliability": 0.95
+          }
+        },
+        {
+          "chunk_ref": "chunk-04-geographic-mix",
+          "claim_id": "chunk-04-geographic-mix-003",
+          "claim_nature": "REALIZED",
+          "claim_subject": "DEMAND_SIGNAL",
+          "claim_text": "One AI research and deployment company contributed a meaningful amount of revenue through cloud services purchases from NVIDIA's customers in Q1 FY2027",
+          "direction": "INCREASE",
+          "extraction_quality": {
+            "entity_consistency": true,
+            "numeric_consistency": true,
+            "temporal_consistency": true,
+            "verbatim_overlap": 0.85
+          },
+          "instrument_type": null,
+          "macro_variable": null,
+          "magnitude_qualifier": "MODERATE",
+          "published_date": "2026-05-20",
+          "source_ref": {
+            "content_source": "10-Q",
+            "discovery_channel": "edgar_api",
+            "source_reliability": 0.95
+          }
+        }
+      ],
+      "error": null,
+      "latency_ms": 3690,
+      "schema_valid": true,
+      "usage": {
+        "completion_tokens": 787,
+        "prompt_tokens": 775
+      }
+    },
+    {
+      "chunk_id": "chunk-05-gross-margin",
+      "claims": [
+        {
+          "chunk_ref": "chunk-05-gross-margin",
+          "claim_id": "chunk-05-gross-margin-001",
+          "claim_nature": "REALIZED",
+          "claim_subject": "FINANCIAL_HEALTH",
+          "claim_text": "Gross margin increased to 74.9% in Q1 FY2027 from 60.5% in Q1 FY2026",
+          "direction": "INCREASE",
+          "extraction_quality": {
+            "entity_consistency": true,
+            "numeric_consistency": true,
+            "temporal_consistency": true,
+            "verbatim_overlap": 0.95
+          },
+          "instrument_type": null,
+          "macro_variable": null,
+          "magnitude_qualifier": "STRONG",
+          "published_date": "2026-05-20",
+          "source_ref": {
+            "content_source": "10-Q",
+            "discovery_channel": "edgar_api",
+            "source_reliability": 0.95
+          }
+        },
+        {
+          "chunk_ref": "chunk-05-gross-margin",
+          "claim_id": "chunk-05-gross-margin-002",
+          "claim_nature": "REALIZED",
+          "claim_subject": "COST_SIGNAL",
+          "claim_text": "Prior year Q1 FY2026 gross margin was depressed by $4.5 billion charge for H20 excess inventory and purchase obligations",
+          "direction": "DECREASE",
+          "extraction_quality": {
+            "entity_consistency": true,
+            "numeric_consistency": true,
+            "temporal_consistency": true,
+            "verbatim_overlap": 0.92
+          },
+          "instrument_type": null,
+          "macro_variable": null,
+          "magnitude_qualifier": "EXTREME",
+          "published_date": "2026-05-20",
+          "source_ref": {
+            "content_source": "10-Q",
+            "discovery_channel": "edgar_api",
+            "source_reliability": 0.95
+          }
+        },
+        {
+          "chunk_ref": "chunk-05-gross-margin",
+          "claim_id": "chunk-05-gross-margin-003",
+          "claim_nature": "REALIZED",
+          "claim_subject": "COST_SIGNAL",
+          "claim_text": "Inventory and excess inventory purchase obligation provisions decreased to $1.1 billion in Q1 FY2027 from $5.3 billion in Q1 FY2026",
+          "direction": "DECREASE",
+          "extraction_quality": {
+            "entity_consistency": true,
+            "numeric_consistency": true,
+            "temporal_consistency": true,
+            "verbatim_overlap": 0.93
+          },
+          "instrument_type": null,
+          "macro_variable": null,
+          "magnitude_qualifier": "STRONG",
+          "published_date": "2026-05-20",
+          "source_ref": {
+            "content_source": "10-Q",
+            "discovery_channel": "edgar_api",
+            "source_reliability": 0.95
+          }
+        },
+        {
+          "chunk_ref": "chunk-05-gross-margin",
+          "claim_id": "chunk-05-gross-margin-004",
+          "claim_nature": "REALIZED",
+          "claim_subject": "FINANCIAL_HEALTH",
+          "claim_text": "Sales of previously reserved inventory and settlements of excess inventory purchase obligations generated $539 million in provision releases in Q1 FY2027",
+          "direction": "INCREASE",
+          "extraction_quality": {
+            "entity_consistency": true,
+            "numeric_consistency": true,
+            "temporal_consistency": true,
+            "verbatim_overlap": 0.88
+          },
+          "instrument_type": null,
+          "macro_variable": null,
+          "magnitude_qualifier": "MODERATE",
+          "published_date": "2026-05-20",
+          "source_ref": {
+            "content_source": "10-Q",
+            "discovery_channel": "edgar_api",
+            "source_reliability": 0.95
+          }
+        }
+      ],
+      "error": null,
+      "latency_ms": 5218,
+      "schema_valid": true,
+      "usage": {
+        "completion_tokens": 1049,
+        "prompt_tokens": 802
+      }
+    },
+    {
+      "chunk_id": "chunk-06-operating-expenses",
+      "claims": [
+        {
+          "chunk_ref": "chunk-06-operating-expenses",
+          "claim_id": "chunk-06-rnd-expense-absolute",
+          "claim_nature": "REALIZED",
+          "claim_subject": "COST_SIGNAL",
+          "claim_text": "R&D expense increased to $6.321 billion in Q1 FY2027 from $3.989 billion in Q1 FY2026",
+          "direction": "INCREASE",
+          "extraction_quality": {
+            "entity_consistency": true,
+            "numeric_consistency": true,
+            "temporal_consistency": true,
+            "verbatim_overlap": 0.95
+          },
+          "instrument_type": null,
+          "macro_variable": null,
+          "magnitude_qualifier": "STRONG",
+          "published_date": "2026-05-20",
+          "source_ref": {
+            "content_source": "10-Q",
+            "discovery_channel": "edgar_api",
+            "source_reliability": 0.95
+          }
+        },
+        {
+          "chunk_ref": "chunk-06-operating-expenses",
+          "claim_id": "chunk-06-rnd-expense-growth-rate",
+          "claim_nature": "REALIZED",
+          "claim_subject": "COST_SIGNAL",
+          "claim_text": "R&D expense grew 58% year-over-year in Q1 FY2027",
+          "direction": "INCREASE",
+          "extraction_quality": {
+            "entity_consistency": true,
+            "numeric_consistency": true,
+            "temporal_consistency": true,
+            "verbatim_overlap": 0.92
+          },
+          "instrument_type": null,
+          "macro_variable": null,
+          "magnitude_qualifier": "STRONG",
+          "published_date": "2026-05-20",
+          "source_ref": {
+            "content_source": "10-Q",
+            "discovery_channel": "edgar_api",
+            "source_reliability": 0.95
+          }
+        },
+        {
+          "chunk_ref": "chunk-06-operating-expenses",
+          "claim_id": "chunk-06-compute-infrastructure-growth",
+          "claim_nature": "REALIZED",
+          "claim_subject": "COST_SIGNAL",
+          "claim_text": "Compute and infrastructure costs increased 112% year-over-year, driving R&D expense growth",
+          "direction": "INCREASE",
+          "extraction_quality": {
+            "entity_consistency": true,
+            "numeric_consistency": true,
+            "temporal_consistency": true,
+            "verbatim_overlap": 0.88
+          },
+          "instrument_type": null,
+          "macro_variable": null,
+          "magnitude_qualifier": "EXTREME",
+          "published_date": "2026-05-20",
+          "source_ref": {
+            "content_source": "10-Q",
+            "discovery_channel": "edgar_api",
+            "source_reliability": 0.95
+          }
+        },
+        {
+          "chunk_ref": "chunk-06-operating-expenses",
+          "claim_id": "chunk-06-engineering-materials-growth",
+          "claim_nature": "REALIZED",
+          "claim_subject": "COST_SIGNAL",
+          "claim_text": "Engineering development materials costs increased 204% year-over-year for new product introductions",
+          "direction": "INCREASE",
+          "extraction_quality": {
+            "entity_consistency": true,
+            "numeric_consistency": true,
+            "temporal_consistency": true,
+            "verbatim_overlap": 0.9
+          },
+          "instrument_type": null,
+          "macro_variable": null,
+          "magnitude_qualifier": "EXTREME",
+          "published_date": "2026-05-20",
+          "source_ref": {
+            "content_source": "10-Q",
+            "discovery_channel": "edgar_api",
+            "source_reliability": 0.95
+          }
+        },
+        {
+          "chunk_ref": "chunk-06-operating-expenses",
+          "claim_id": "chunk-06-compensation-growth",
+          "claim_nature": "REALIZED",
+          "claim_subject": "COST_SIGNAL",
+          "claim_text": "Compensation and benefits increased 31% year-over-year, reflecting employee growth and compensation increases",
+          "direction": "INCREASE",
+          "extraction_quality": {
+            "entity_consistency": true,
+            "numeric_consistency": true,
+            "temporal_consistency": true,
+            "verbatim_overlap": 0.87
+          },
+          "instrument_type": null,
+          "macro_variable": null,
+          "magnitude_qualifier": "MODERATE",
+          "published_date": "2026-05-20",
+          "source_ref": {
+            "content_source": "10-Q",
+            "discovery_channel": "edgar_api",
+            "source_reliability": 0.95
+          }
+        },
+        {
+          "chunk_ref": "chunk-06-operating-expenses",
+          "claim_id": "chunk-06-sga-expense-absolute",
+          "claim_nature": "REALIZED",
+          "claim_subject": "COST_SIGNAL",
+          "claim_text": "SG&A expense increased to $1.300 billion in Q1 FY2027 from $1.041 billion in Q1 FY2026",
+          "direction": "INCREASE",
+          "extraction_quality": {
+            "entity_consistency": true,
+            "numeric_consistency": true,
+            "temporal_consistency": true,
+            "verbatim_overlap": 0.93
+          },
+          "instrument_type": null,
+          "macro_variable": null,
+          "magnitude_qualifier": "MODERATE",
+          "published_date": "2026-05-20",
+          "source_ref": {
+            "content_source": "10-Q",
+            "discovery_channel": "edgar_api",
+            "source_reliability": 0.95
+          }
+        },
+        {
+          "chunk_ref": "chunk-06-operating-expenses",
+          "claim_id": "chunk-06-sga-growth-rate",
+          "claim_nature": "REALIZED",
+          "claim_subject": "COST_SIGNAL",
+          "claim_text": "SG&A expense grew 25% year-over-year in Q1 FY2027",
+          "direction": "INCREASE",
+          "extraction_quality": {
+            "entity_consistency": true,
+            "numeric_consistency": true,
+            "temporal_consistency": true,
+            "verbatim_overlap": 0.9
+          },
+          "instrument_type": null,
+          "macro_variable": null,
+          "magnitude_qualifier": "MODERATE",
+          "published_date": "2026-05-20",
+          "source_ref": {
+            "content_source": "10-Q",
+            "discovery_channel": "edgar_api",
+            "source_reliability": 0.95
+          }
+        },
+        {
+          "chunk_ref": "chunk-06-operating-expenses",
+          "claim_id": "chunk-06-total-opex-absolute",
+          "claim_nature": "REALIZED",
+          "claim_subject": "COST_SIGNAL",
+          "claim_text": "Total operating expenses increased to $7.621 billion in Q1 FY2027 from $5.030 billion in Q1 FY2026",
+          "direction": "INCREASE",
+          "extraction_quality": {
+            "entity_consistency": true,
+            "numeric_consistency": true,
+            "temporal_consistency": true,
+            "verbatim_overlap": 0.94
+          },
+          "instrument_type": null,
+          "macro_variable": null,
+          "magnitude_qualifier": "STRONG",
+          "published_date": "2026-05-20",
+          "source_ref": {
+            "content_source": "10-Q",
+            "discovery_channel": "edgar_api",
+            "source_reliability": 0.95
+          }
+        },
+        {
+          "chunk_ref": "chunk-06-operating-expenses",
+          "claim_id": "chunk-06-total-opex-growth-rate",
+          "claim_nature": "REALIZED",
+          "claim_subject": "COST_SIGNAL",
+          "claim_text": "Total operating expenses grew 52% year-over-year in Q1 FY2027",
+          "direction": "INCREASE",
+          "extraction_quality": {
+            "entity_consistency": true,
+            "numeric_consistency": true,
+            "temporal_consistency": true,
+            "verbatim_overlap": 0.9
+          },
+          "instrument_type": null,
+          "macro_variable": null,
+          "magnitude_qualifier": "STRONG",
+          "published_date": "2026-05-20",
+          "source_ref": {
+            "content_source": "10-Q",
+            "discovery_channel": "edgar_api",
+            "source_reliability": 0.95
+          }
+        }
+      ],
+      "error": null,
+      "latency_ms": 8905,
+      "schema_valid": true,
+      "usage": {
+        "completion_tokens": 2274,
+        "prompt_tokens": 794
+      }
+    },
+    {
+      "chunk_id": "chunk-07-investment-gains-tax",
+      "claims": [],
+      "error": "ValidationError: 1 validation error for Claim\nmacro_variable\n  Value error, macro_variable is only valid for MACRO_EXPOSURE [type=value_error, input_value='RATE', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/value_error",
+      "latency_ms": 0,
+      "schema_valid": false,
+      "usage": {
+        "completion_tokens": 0,
+        "prompt_tokens": 0
+      }
+    },
+    {
+      "chunk_id": "chunk-08-capital-return",
+      "claims": [
+        {
+          "chunk_ref": "chunk-08-capital-return",
+          "claim_id": "chunk-08-capital-return-001",
+          "claim_nature": "REALIZED",
+          "claim_subject": "CAPITAL_ALLOCATION",
+          "claim_text": "NVIDIA repurchased 108 million shares for $20.2 billion in Q1 FY2027",
+          "direction": "DECREASE",
+          "extraction_quality": {
+            "entity_consistency": true,
+            "numeric_consistency": true,
+            "temporal_consistency": true,
+            "verbatim_overlap": 0.95
+          },
+          "instrument_type": "SHARE_REPURCHASE",
+          "macro_variable": null,
+          "magnitude_qualifier": "STRONG",
+          "published_date": "2026-05-20",
+          "source_ref": {
+            "content_source": "10-Q",
+            "discovery_channel": "edgar_api",
+            "source_reliability": 0.95
+          }
+        },
+        {
+          "chunk_ref": "chunk-08-capital-return",
+          "claim_id": "chunk-08-capital-return-002",
+          "claim_nature": "GUIDANCE",
+          "claim_subject": "CAPITAL_ALLOCATION",
+          "claim_text": "Board approved additional $80.0 billion share repurchase authorization on May 18, 2026, without expiration",
+          "direction": "INCREASE",
+          "extraction_quality": {
+            "entity_consistency": true,
+            "numeric_consistency": true,
+            "temporal_consistency": true,
+            "verbatim_overlap": 0.92
+          },
+          "instrument_type": "SHARE_REPURCHASE",
+          "macro_variable": null,
+          "magnitude_qualifier": "EXTREME",
+          "published_date": "2026-05-20",
+          "source_ref": {
+            "content_source": "10-Q",
+            "discovery_channel": "edgar_api",
+            "source_reliability": 0.95
+          }
+        },
+        {
+          "chunk_ref": "chunk-08-capital-return",
+          "claim_id": "chunk-08-capital-return-003",
+          "claim_nature": "GUIDANCE",
+          "claim_subject": "CAPITAL_ALLOCATION",
+          "claim_text": "Quarterly cash dividend increased from $0.01 per share to $0.25 per share effective June 4, 2026",
+          "direction": "INCREASE",
+          "extraction_quality": {
+            "entity_consistency": true,
+            "numeric_consistency": true,
+            "temporal_consistency": true,
+            "verbatim_overlap": 0.88
+          },
+          "instrument_type": "DIVIDEND",
+          "macro_variable": null,
+          "magnitude_qualifier": "STRONG",
+          "published_date": "2026-05-20",
+          "source_ref": {
+            "content_source": "10-Q",
+            "discovery_channel": "edgar_api",
+            "source_reliability": 0.95
+          }
+        },
+        {
+          "chunk_ref": "chunk-08-capital-return",
+          "claim_id": "chunk-08-capital-return-004",
+          "claim_nature": "REALIZED",
+          "claim_subject": "CAPITAL_ALLOCATION",
+          "claim_text": "Cash dividends paid to shareholders were $243 million in Q1 FY2027",
+          "direction": "DECREASE",
+          "extraction_quality": {
+            "entity_consistency": true,
+            "numeric_consistency": true,
+            "temporal_consistency": true,
+            "verbatim_overlap": 0.9
+          },
+          "instrument_type": "DIVIDEND",
+          "macro_variable": null,
+          "magnitude_qualifier": "MODERATE",
+          "published_date": "2026-05-20",
+          "source_ref": {
+            "content_source": "10-Q",
+            "discovery_channel": "edgar_api",
+            "source_reliability": 0.95
+          }
+        }
+      ],
+      "error": null,
+      "latency_ms": 4613,
+      "schema_valid": true,
+      "usage": {
+        "completion_tokens": 1033,
+        "prompt_tokens": 834
+      }
+    },
+    {
+      "chunk_id": "chunk-09-h200-china-licenses",
+      "claims": [
+        {
+          "chunk_ref": "chunk-09-h200-china-licenses",
+          "claim_id": "chunk-09-h200-china-licenses-001",
+          "claim_nature": "REALIZED",
+          "claim_subject": "SUPPLY_SIGNAL",
+          "claim_text": "USG granted licenses in February 2026 allowing NVIDIA to ship small amounts of H200 products to specific China-based customers",
+          "direction": "INCREASE",
+          "extraction_quality": {
+            "entity_consistency": true,
+            "numeric_consistency": true,
+            "temporal_consistency": true,
+            "verbatim_overlap": 0.92
+          },
+          "instrument_type": null,
+          "macro_variable": null,
+          "magnitude_qualifier": "WEAK",
+          "published_date": "2026-05-20",
+          "source_ref": {
+            "content_source": "10-Q",
+            "discovery_channel": "edgar_api",
+            "source_reliability": 0.95
+          }
+        },
+        {
+          "chunk_ref": "chunk-09-h200-china-licenses",
+          "claim_id": "chunk-09-h200-china-licenses-002",
+          "claim_nature": "REALIZED",
+          "claim_subject": "FINANCIAL_HEALTH",
+          "claim_text": "NVIDIA has not generated any revenue under the H200 licensing program to date",
+          "direction": "NEUTRAL",
+          "extraction_quality": {
+            "entity_consistency": true,
+            "numeric_consistency": true,
+            "temporal_consistency": true,
+            "verbatim_overlap": 0.88
+          },
+          "instrument_type": null,
+          "macro_variable": null,
+          "magnitude_qualifier": "MODERATE",
+          "published_date": "2026-05-20",
+          "source_ref": {
+            "content_source": "10-Q",
+            "discovery_channel": "edgar_api",
+            "source_reliability": 0.95
+          }
+        },
+        {
+          "chunk_ref": "chunk-09-h200-china-licenses",
+          "claim_id": "chunk-09-h200-china-licenses-003",
+          "claim_nature": "REALIZED",
+          "claim_subject": "COST_SIGNAL",
+          "claim_text": "H200 products shipped under the licensing program are subject to a 25% tariff upon importation into the United States",
+          "direction": "INCREASE",
+          "extraction_quality": {
+            "entity_consistency": true,
+            "numeric_consistency": true,
+            "temporal_consistency": true,
+            "verbatim_overlap": 0.89
+          },
+          "instrument_type": null,
+          "macro_variable": null,
+          "magnitude_qualifier": "STRONG",
+          "published_date": "2026-05-20",
+          "source_ref": {
+            "content_source": "10-Q",
+            "discovery_channel": "edgar_api",
+            "source_reliability": 0.95
+          }
+        },
+        {
+          "chunk_ref": "chunk-09-h200-china-licenses",
+          "claim_id": "chunk-09-h200-china-licenses-004",
+          "claim_nature": "RISK_FLAG",
+          "claim_subject": "PRICING_SIGNAL",
+          "claim_text": "NVIDIA may not be able to pass along all or any of the 25% tariff to customers for licensed H200 products sold into China",
+          "direction": "DECREASE",
+          "extraction_quality": {
+            "entity_consistency": true,
+            "numeric_consistency": true,
+            "temporal_consistency": true,
+            "verbatim_overlap": 0.85
+          },
+          "instrument_type": null,
+          "macro_variable": null,
+          "magnitude_qualifier": "MODERATE",
+          "published_date": "2026-05-20",
+          "source_ref": {
+            "content_source": "10-Q",
+            "discovery_channel": "edgar_api",
+            "source_reliability": 0.95
+          }
+        },
+        {
+          "chunk_ref": "chunk-09-h200-china-licenses",
+          "claim_id": "chunk-09-h200-china-licenses-005",
+          "claim_nature": "RISK_FLAG",
+          "claim_subject": "COMPETITIVE_POSITION",
+          "claim_text": "NVIDIA may be subject to litigation, increased costs, and harmed competitive position if able to sell licensed H200 products into China market",
+          "direction": "DECREASE",
+          "extraction_quality": {
+            "entity_consistency": true,
+            "numeric_consistency": true,
+            "temporal_consistency": true,
+            "verbatim_overlap": 0.87
+          },
+          "instrument_type": null,
+          "macro_variable": null,
+          "magnitude_qualifier": "MODERATE",
+          "published_date": "2026-05-20",
+          "source_ref": {
+            "content_source": "10-Q",
+            "discovery_channel": "edgar_api",
+            "source_reliability": 0.95
+          }
+        }
+      ],
+      "error": null,
+      "latency_ms": 5949,
+      "schema_valid": true,
+      "usage": {
+        "completion_tokens": 1301,
+        "prompt_tokens": 766
+      }
+    },
+    {
+      "chunk_id": "chunk-10-export-controls-risk",
+      "claims": [
+        {
+          "chunk_ref": "chunk-10-export-controls-risk",
+          "claim_id": "chunk-10-export-controls-risk-001",
+          "claim_nature": "REALIZED",
+          "claim_subject": "COMPETITIVE_POSITION",
+          "claim_text": "NVIDIA is unable to create and deliver a competitive data center product for China that receives approval from both USG and Chinese government under current export control rules.",
+          "direction": "DECREASE",
+          "extraction_quality": {
+            "entity_consistency": true,
+            "numeric_consistency": true,
+            "temporal_consistency": true,
+            "verbatim_overlap": 0.92
+          },
+          "instrument_type": null,
+          "macro_variable": null,
+          "magnitude_qualifier": "STRONG",
+          "published_date": "2026-05-20",
+          "source_ref": {
+            "content_source": "10-Q",
+            "discovery_channel": "edgar_api",
+            "source_reliability": 0.95
+          }
+        },
+        {
+          "chunk_ref": "chunk-10-export-controls-risk",
+          "claim_id": "chunk-10-export-controls-risk-002",
+          "claim_nature": "REALIZED",
+          "claim_subject": "MARKET_STRUCTURE",
+          "claim_text": "NVIDIA is effectively foreclosed from competing in China's data center computing market as of Q1 FY2027.",
+          "direction": "DECREASE",
+          "extraction_quality": {
+            "entity_consistency": true,
+            "numeric_consistency": true,
+            "temporal_consistency": true,
+            "verbatim_overlap": 0.88
+          },
+          "instrument_type": null,
+          "macro_variable": null,
+          "magnitude_qualifier": "EXTREME",
+          "published_date": "2026-05-20",
+          "source_ref": {
+            "content_source": "10-Q",
+            "discovery_channel": "edgar_api",
+            "source_reliability": 0.95
+          }
+        },
+        {
+          "chunk_ref": "chunk-10-export-controls-risk",
+          "claim_id": "chunk-10-export-controls-risk-003",
+          "claim_nature": "REALIZED",
+          "claim_subject": "COMPETITIVE_POSITION",
+          "claim_text": "NVIDIA's foreclosure from China data center market has enabled competitors to build larger developer and customer ecosystems to challenge NVIDIA worldwide.",
+          "direction": "DECREASE",
+          "extraction_quality": {
+            "entity_consistency": true,
+            "numeric_consistency": true,
+            "temporal_consistency": true,
+            "verbatim_overlap": 0.85
+          },
+          "instrument_type": null,
+          "macro_variable": null,
+          "magnitude_qualifier": "STRONG",
+          "published_date": "2026-05-20",
+          "source_ref": {
+            "content_source": "10-Q",
+            "discovery_channel": "edgar_api",
+            "source_reliability": 0.95
+          }
+        },
+        {
+          "chunk_ref": "chunk-10-export-controls-risk",
+          "claim_id": "chunk-10-export-controls-risk-004",
+          "claim_nature": "RISK_FLAG",
+          "claim_subject": "FINANCIAL_HEALTH",
+          "claim_text": "Inability to return with a dual-government-approved data center system will have material adverse impact on NVIDIA's business, operating results, and financial condition.",
+          "direction": "DECREASE",
+          "extraction_quality": {
+            "entity_consistency": true,
+            "numeric_consistency": true,
+            "temporal_consistency": true,
+            "verbatim_overlap": 0.89
+          },
+          "instrument_type": null,
+          "macro_variable": null,
+          "magnitude_qualifier": "EXTREME",
+          "published_date": "2026-05-20",
+          "source_ref": {
+            "content_source": "10-Q",
+            "discovery_channel": "edgar_api",
+            "source_reliability": 0.95
+          }
+        }
+      ],
+      "error": null,
+      "latency_ms": 4793,
+      "schema_valid": true,
+      "usage": {
+        "completion_tokens": 1045,
+        "prompt_tokens": 783
+      }
+    }
+  ],
+  "schema_validation_rate": 0.9,
+  "total_cost_usd": 0.06204
+}

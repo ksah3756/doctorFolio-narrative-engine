@@ -4,8 +4,10 @@ import numpy as np
 import pytest
 
 from dcf_engine import nvda_spike
-from dcf_engine.monte_carlo import MonteCarloResult
+from dcf_engine.claim import Claim
+from dcf_engine.monte_carlo import MonteCarloConfig, MonteCarloResult, mc_run
 from dcf_engine.nvda_spike import run_nvda_spike
+from dcf_engine.routing import route_claims_to_factors
 
 
 def test_nvda_spike_end_to_end_dod() -> None:
@@ -20,6 +22,13 @@ def test_nvda_spike_end_to_end_dod() -> None:
         result.fair_value_samples_usd,
         run_nvda_spike(seed=20260603, iterations=1_000).fair_value_samples_usd,
     )
+
+
+def test_positive_operating_claims_do_not_reduce_nvda_below_baseline() -> None:
+    baseline = _spike_fair_value_median([])
+    positive_operating = _spike_fair_value_median(nvda_spike._nvda_claims())
+
+    assert positive_operating >= baseline
 
 
 def test_spike_report_exists_with_section_18_results() -> None:
@@ -78,3 +87,19 @@ def test_spike_valuation_approximations_are_named_and_documented() -> None:
 
     text = Path("docs/nvda-spike-report.md").read_text()
     assert "spike-only Gordon proxy" in text
+
+
+def _spike_fair_value_median(claims: list[Claim]) -> float:
+    rng = np.random.default_rng(20260607)
+    tam_samples = np.array([nvda_spike.sample_tam_total(rng) for _ in range(1_000)], dtype=float)
+    factors = route_claims_to_factors(claims, "growth")
+    result = mc_run(
+        factors,
+        nvda_spike._assumptions(tam_mu=float(tam_samples.mean())),
+        "growth",
+        "normal",
+        nvda_spike._company(),
+        MonteCarloConfig(iterations=1_000, seed=20260607),
+    )
+    fair_values = nvda_spike._fair_values(tam_samples[result.accepted_indices], result.samples)
+    return float(np.median(fair_values))

@@ -1,0 +1,6 @@
+# source_filing: NVIDIA Form 10-Q, accession 0001045810-26-000052
+# source_url: https://www.sec.gov/Archives/edgar/data/1045810/000104581026000052/nvda-20260426.htm
+# source_page: 29
+# period: quarter ended April 26, 2026
+
+Capital Return to Shareholders. In the first quarter of fiscal year 2027, we repurchased 108 million shares of our common stock for $20.2 billion. As of April 26, 2026, we were authorized, subject to certain specifications, to repurchase up to $38.5 billion of our common stock. On May 18, 2026, our Board of Directors approved an additional $80.0 billion in share repurchase authorization, without expiration. We may execute repurchases from time to time, subject to market conditions, operating requirements and other investment opportunities, in the open market, in privately-negotiated transactions, pursuant to a Rule 10b5-1 trading plan or in structured share repurchase agreements in compliance with Rule 10b-18 of the Exchange Act. We paid cash dividends to our shareholders of $243 million during the first quarter of fiscal year 2027. On May 18, 2026, we increased our quarterly cash dividend from $0.01 per share to $0.25 per share to all shareholders of record on June 4, 2026.

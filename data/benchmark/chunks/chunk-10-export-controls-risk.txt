@@ -1,0 +1,6 @@
+# source_filing: NVIDIA Form 10-Q, accession 0001045810-26-000052
+# source_url: https://www.sec.gov/Archives/edgar/data/1045810/000104581026000052/nvda-20260426.htm
+# source_page: 36
+# period: quarter ended April 26, 2026
+
+China Data Center and Export Control Risk. The export controls applicable to China are complex and address a variety of parameters, including total processing performance, performance density, interconnect bandwidth, and memory bandwidth. Under the current rules and geopolitical landscape, we are unable to create and deliver a competitive product for China's data center market that receives approval from both the USG and the Chinese government. As of the end of the first quarter of fiscal year 2027, while we were able to ship uncontrolled products to China, such as gaming and workstation GPUs, we were effectively foreclosed from competing in China's data center computing market, and our effective foreclosure helped competitors build larger developer and customer ecosystems to challenge us worldwide. Unless we are able to return with a data center system that meets both governments' approval, our lost opportunity and the benefit to competitors will have a material and adverse impact on our business, operating results, and financial condition.

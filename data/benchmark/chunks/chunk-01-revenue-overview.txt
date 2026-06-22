@@ -1,0 +1,6 @@
+# source_filing: NVIDIA Form 10-Q, accession 0001045810-26-000052
+# source_url: https://www.sec.gov/Archives/edgar/data/1045810/000104581026000052/nvda-20260426.htm
+# source_page: 26
+# period: quarter ended April 26, 2026
+
+Reportable Segments. Revenue by reportable segments for the three months ended April 26, 2026 and April 27, 2025 showed Compute & Networking revenue of $74.550 billion compared with $39.589 billion, a year-over-year increase of $34.961 billion, or 88%. Graphics revenue was $7.065 billion compared with $4.473 billion, a year-over-year increase of $2.592 billion, or 58%. Total revenue was $81.615 billion compared with $44.062 billion, an increase of $37.553 billion, or 85%. Compute & Networking operating income was $53.335 billion compared with $22.054 billion, up 142%. Graphics operating income was $2.941 billion compared with $1.640 billion, up 79%. Total reportable segment operating income was $56.276 billion compared with $23.694 billion, up 138%.
