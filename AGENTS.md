@@ -35,6 +35,13 @@ Before any task is "Done":
 | **Reviewer**    | Claude | Review against standards → `REVIEW-N.md` |
 | **Git Manager** | Claude | PR 생성/머지 (APPROVED 후)               |
 
+### Auto-loop 명령어 (`ㄱㄱ` / `go`)
+
+Discord auto-loop에서 사용자의 `ㄱㄱ`(또는 `go`)는 **직전 봇 메시지의 게이트를 승인하고 다음 단계로 진행**하라는 뜻. 매번 Discord 기록을 뒤질 필요 없이 직전 메시지가 가리키는 단계를 실행하면 됨. 게이트는 둘:
+
+1. **`📋 다음 작업 제안` 직후** → 제안된 작업을 Codex에 위임 시작 (이슈 생성 → `feat/N-slug` 브랜치 → `scripts/dispatch-codex-task.sh`).
+2. **`✅ 리뷰 통과` 직후** → PR 생성 + 머지 (`gh pr create` → `gh pr merge`).
+
 ## 3. Tech Stack
 
 - Language: Python 3.12 (strict typing via mypy)
