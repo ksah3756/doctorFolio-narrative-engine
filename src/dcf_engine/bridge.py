@@ -129,9 +129,10 @@ def _apply_percent_change(value: float, percent_change: float) -> float:
 
 
 def equity_value(inputs: BridgeInputs) -> float:
-    distress_adjusted = (
-        (1 - inputs.default_probability) * inputs.going_concern_firm_value
-        + inputs.default_probability * inputs.liquidation_firm_value
+    distress_adjusted = _distress_adjusted_firm_value(
+        inputs.going_concern_firm_value,
+        inputs.liquidation_firm_value,
+        inputs.default_probability,
     )
     value = (
         distress_adjusted
@@ -144,3 +145,15 @@ def equity_value(inputs: BridgeInputs) -> float:
     if not isfinite(value):
         raise ValueError("equity_value must be finite")
     return value
+
+
+def _distress_adjusted_firm_value(
+    going_concern_firm_value: float,
+    liquidation_firm_value: float,
+    default_probability: float,
+) -> float:
+    # 부도확률 가중은 scalar와 후속 vector 경로가 공유할 단일 계산 경계다.
+    return (
+        (1 - default_probability) * going_concern_firm_value
+        + default_probability * liquidation_firm_value
+    )
