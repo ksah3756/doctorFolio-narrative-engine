@@ -58,7 +58,10 @@ def _auto_loop_env(
     codex_called = tmp_path / "codex-called"
     _write_executable(
         bin_dir / "claude",
-        '#!/bin/sh\ntouch "$FAKE_CLAUDE_CALLED"\n',
+        "#!/bin/sh\n"
+        'touch "$FAKE_CLAUDE_CALLED"\n'
+        'printf "%s\\n" "${FAKE_CLAUDE_OUTPUT:-}"\n'
+        'exit "${FAKE_CLAUDE_EXIT:-0}"\n',
     )
     _write_executable(
         bin_dir / "codex",
@@ -649,7 +652,7 @@ def test_awaiting_pr_always_defers_to_shell_poller(tmp_path: Path) -> None:
     assert "10분 PR 승인 poller" in log
 
 
-def test_awaiting_claude_review_does_not_wake_scheduled_llm(tmp_path: Path) -> None:
+def test_awaiting_claude_review_retries_claude_on_scheduled_loop(tmp_path: Path) -> None:
     project_dir, env, claude_called = _auto_loop_env(
         tmp_path,
         "awaiting_claude_review",
@@ -666,10 +669,43 @@ def test_awaiting_claude_review_does_not_wake_scheduled_llm(tmp_path: Path) -> N
     )
 
     assert result.returncode == 0, result.stderr
-    assert not claude_called.exists()
+    assert claude_called.exists()
     assert not (tmp_path / "codex-called").exists()
     log = (project_dir / ".auto-loop/logs/auto-loop.log").read_text()
-    assert "Discord 조건부 Claude 리뷰가 처리" in log
+    assert "조건부 Claude 리뷰 재시도" in log
+
+
+def test_required_claude_review_never_falls_back_to_codex_on_session_limit(
+    tmp_path: Path,
+) -> None:
+    project_dir, env, claude_called = _auto_loop_env(
+        tmp_path,
+        "awaiting_claude_review",
+        [],
+    )
+    env.update(
+        {
+            "FAKE_CLAUDE_EXIT": "7",
+            "FAKE_CLAUDE_OUTPUT": "You've hit your session limit",
+        }
+    )
+
+    result = subprocess.run(
+        [str(project_dir / "scripts" / "auto-loop.sh")],
+        cwd=project_dir,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert claude_called.exists()
+    assert not (tmp_path / "codex-called").exists()
+    state = (project_dir / ".auto-loop/work-status.md").read_text()
+    assert "phase: awaiting_claude_review" in state
+    log = (project_dir / ".auto-loop/logs/auto-loop.log").read_text()
+    assert "Codex fallback 금지" in log
 
 
 def test_legacy_awaiting_approval_runs_codex_without_new_user_message(tmp_path: Path) -> None:
