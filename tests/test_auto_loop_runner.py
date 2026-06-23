@@ -2,10 +2,14 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
+AUTO_LOOP = REPO_ROOT / "scripts" / "auto-loop.sh"
 RUNNER = REPO_ROOT / "scripts" / "run-codex-task.sh"
 LESSON_RECORDER = REPO_ROOT / "scripts" / "record-auto-loop-lesson.sh"
 
@@ -26,6 +30,63 @@ def _init_repo(path: Path) -> None:
     (path / "README.md").write_text("test repo\n")
     subprocess.run(["git", "add", "README.md"], cwd=path, check=True)
     subprocess.run(["git", "commit", "-m", "Initialize test repo"], cwd=path, check=True)
+
+
+def _auto_loop_env(
+    tmp_path: Path,
+    phase: str,
+    discord_messages: list[dict[str, object]],
+    *,
+    curl_exit: int = 0,
+) -> tuple[Path, dict[str, str], Path]:
+    project_dir = tmp_path / "auto-loop-project"
+    scripts_dir = project_dir / "scripts"
+    state_dir = project_dir / ".auto-loop"
+    bin_dir = tmp_path / "auto-loop-bin"
+    scripts_dir.mkdir(parents=True)
+    state_dir.mkdir()
+    bin_dir.mkdir()
+
+    shutil.copy2(AUTO_LOOP, scripts_dir / "auto-loop.sh")
+    (scripts_dir / "auto-loop-prompt.md").write_text("Run one Claude step.\n")
+    (scripts_dir / "codex-auto-loop-prompt.md").write_text("Run one Codex step.\n")
+    (scripts_dir / "auto-loop-mcp.json").write_text("{}\n")
+
+    proposed_at = "2026-06-23T00:00:00Z" if phase == "awaiting_approval" else "null"
+    (state_dir / "work-status.md").write_text(
+        "---\n"
+        f"phase: {phase}\n"
+        f"proposed_at: {proposed_at}\n"
+        "updated: 2026-06-23T00:00:00Z\n"
+        "---\n"
+    )
+
+    claude_called = tmp_path / "claude-called"
+    _write_executable(
+        bin_dir / "claude",
+        "#!/bin/sh\n"
+        'touch "$FAKE_CLAUDE_CALLED"\n',
+    )
+    _write_executable(
+        bin_dir / "curl",
+        "#!/bin/sh\n"
+        'printf "%s" "$FAKE_DISCORD_MESSAGES"\n'
+        'exit "$FAKE_CURL_EXIT"\n',
+    )
+
+    env = os.environ.copy()
+    env.update(
+        {
+            "CLAUDE_BIN": str(bin_dir / "claude"),
+            "CURL_BIN": str(bin_dir / "curl"),
+            "DISCORD_BOT_TOKEN": "test-token",
+            "FAKE_CLAUDE_CALLED": str(claude_called),
+            "FAKE_CURL_EXIT": str(curl_exit),
+            "FAKE_DISCORD_MESSAGES": json.dumps(discord_messages),
+            "HOME": str(tmp_path),
+        }
+    )
+    return project_dir, env, claude_called
 
 
 def _runner_env(tmp_path: Path, project_dir: Path) -> tuple[dict[str, str], Path, Path]:
@@ -168,6 +229,92 @@ def test_auto_loop_prompts_delegate_without_omc_team() -> None:
 def test_auto_loop_codex_fallback_uses_high_reasoning() -> None:
     script = (REPO_ROOT / "scripts" / "auto-loop.sh").read_text()
     assert "model_reasoning_effort=\"high\"" in script
+
+
+@pytest.mark.parametrize("phase", ["awaiting_approval", "awaiting_pr"])
+def test_waiting_phase_skips_llm_without_new_user_message(
+    tmp_path: Path,
+    phase: str,
+) -> None:
+    messages: list[dict[str, object]] = [
+        {
+            "timestamp": "2026-06-23T00:30:00Z",
+            "author": {"id": "1491798466660139148", "bot": True},
+            "content": "bot-only update",
+        },
+        {
+            "timestamp": "2026-06-23T00:31:00Z",
+            "author": {"id": "999", "bot": False},
+            "content": "unrelated user chatter",
+        },
+    ]
+    project_dir, env, claude_called = _auto_loop_env(tmp_path, phase, messages)
+
+    result = subprocess.run(
+        [str(project_dir / "scripts" / "auto-loop.sh")],
+        cwd=project_dir,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert not claude_called.exists()
+    log = (project_dir / ".auto-loop/logs/auto-loop.log").read_text()
+    assert "LLM 호출 생략" in log
+
+
+def test_waiting_phase_wakes_llm_for_new_designated_user_message(tmp_path: Path) -> None:
+    messages: list[dict[str, object]] = [
+        {
+            "timestamp": "2026-06-23T00:30:00Z",
+            "author": {"id": "1131404924094251099", "bot": False},
+            "content": "ㄱㄱ",
+        }
+    ]
+    project_dir, env, claude_called = _auto_loop_env(
+        tmp_path,
+        "awaiting_approval",
+        messages,
+    )
+
+    result = subprocess.run(
+        [str(project_dir / "scripts" / "auto-loop.sh")],
+        cwd=project_dir,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert claude_called.exists()
+
+
+def test_waiting_phase_falls_back_to_llm_when_discord_preflight_fails(
+    tmp_path: Path,
+) -> None:
+    project_dir, env, claude_called = _auto_loop_env(
+        tmp_path,
+        "awaiting_pr",
+        [],
+        curl_exit=7,
+    )
+
+    result = subprocess.run(
+        [str(project_dir / "scripts" / "auto-loop.sh")],
+        cwd=project_dir,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert claude_called.exists()
+    log = (project_dir / ".auto-loop/logs/auto-loop.log").read_text()
+    assert "preflight 실패" in log
 
 
 def test_lesson_recorder_writes_structured_entry_and_deduplicates(tmp_path: Path) -> None:
