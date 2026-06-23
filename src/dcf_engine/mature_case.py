@@ -86,6 +86,9 @@ def run_mature_case(
     history: MatureHistory, *, seed: int = 20260624, iterations: int = 1_000
 ) -> MatureCaseResult:
     """Run the mature lifecycle, narrative, sampling, and reinvestment path."""
+    if iterations < 1:
+        raise ValueError("iterations must be at least 1")
+
     observations = history.observations
     assumptions = _assumptions(observations)
     company, stage = _company_context(observations)
