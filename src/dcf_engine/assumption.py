@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from typing import Final, Literal
 
-from dcf_engine.distributions import DistributionFamily
+from dcf_engine.distributions import DistributionFamily, lognormal_scale_from_three_points
 from dcf_engine.lifecycle import LifecycleStage
 
 type AssumptionName = Literal[
@@ -35,6 +36,12 @@ REINVESTMENT_TOOL_BY_STAGE: Final[dict[LifecycleStage, ReinvestmentTool]] = {
 class ScaleSpec:
     center: float
     uncertainty: float
+
+    @classmethod
+    def from_three_points(cls, low: float, base: float, high: float) -> ScaleSpec:
+        _, sigma_ln = lognormal_scale_from_three_points(low, base, high)
+        uncertainty = base * math.sqrt(math.expm1(sigma_ln**2))
+        return cls(center=base, uncertainty=uncertainty)
 
 
 @dataclass(frozen=True)

@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import warnings
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 
 import numpy as np
 from numpy.random import Generator
 
 from dcf_engine.assumption import AssumptionState
-from dcf_engine.distributions import params_from_moments, sample_distribution
+from dcf_engine.distributions import params_from_moments, sample_distribution, sample_scale
 from dcf_engine.factor import FactorState, Regime
 from dcf_engine.lifecycle import LifecycleStage
 from dcf_engine.loading import resolved_mu, shifted_mu_from_factors
@@ -118,8 +118,16 @@ def mc_iteration(
     for assumption in assumptions:
         if not assumption.active:
             continue
+        scaled_assumption = assumption
+        if stage == "young":
+            # young 단계만 3P scale 불확실성을 narrative shift에 전달한다.
+            hierarchical_scale = sample_scale(assumption.shift_scale, rng)
+            scaled_assumption = replace(
+                assumption,
+                shift_scale=replace(assumption.shift_scale, center=hierarchical_scale),
+            )
         mu = resolved_mu(
-            assumption,
+            scaled_assumption,
             sampled_factors,
             company=company,
             t_year=t_year,

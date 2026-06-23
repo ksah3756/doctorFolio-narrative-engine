@@ -54,6 +54,93 @@ def test_mc_run_is_seed_deterministic_and_tracks_reject_rate() -> None:
     np.testing.assert_array_equal(one.accepted_indices, np.arange(config.iterations))
 
 
+def test_young_hierarchical_scale_is_seed_deterministic() -> None:
+    assumptions = [
+        _assumption(
+            "TAM",
+            1.0,
+            0.0,
+            "normal",
+            shift_scale=ScaleSpec.from_three_points(0.01, 0.05, 0.25),
+        )
+    ]
+    factors = {"DemandStrength": FactorState(name="DemandStrength", current_value=0.5)}
+    config = MonteCarloConfig(iterations=250, seed=20260623)
+
+    one = mc_run(factors, assumptions, "young", "normal", _company(), config)
+    two = mc_run(factors, assumptions, "young", "normal", _company(), config)
+
+    np.testing.assert_array_equal(one.samples["TAM"], two.samples["TAM"])
+
+
+def test_wider_young_hierarchical_scale_increases_mc_variance() -> None:
+    fixed = _assumption(
+        "TAM",
+        1.0,
+        0.0,
+        "normal",
+        shift_scale=ScaleSpec(center=0.05, uncertainty=0.0),
+    )
+    hierarchical = _assumption(
+        "TAM",
+        1.0,
+        0.0,
+        "normal",
+        shift_scale=ScaleSpec.from_three_points(0.01, 0.05, 0.25),
+    )
+    factors = {"DemandStrength": FactorState(name="DemandStrength", current_value=0.5)}
+    config = MonteCarloConfig(iterations=4_000, seed=20260623)
+
+    fixed_result = mc_run(factors, [fixed], "young", "normal", _company(), config)
+    hierarchical_result = mc_run(
+        factors, [hierarchical], "young", "normal", _company(), config
+    )
+
+    fixed_variance = float(np.var(fixed_result.samples["TAM"]))
+    hierarchical_variance = float(np.var(hierarchical_result.samples["TAM"]))
+    assert hierarchical_variance > fixed_variance * 3.0
+
+
+@pytest.mark.parametrize("stage", ["growth", "mature", "decline"])
+def test_hierarchical_scale_keeps_non_young_stage_behavior(
+    stage: LifecycleStage,
+) -> None:
+    fixed = _assumption(
+        "TAM",
+        1.0,
+        0.0,
+        "normal",
+        shift_scale=ScaleSpec(center=0.05, uncertainty=0.0),
+    )
+    hierarchical = _assumption(
+        "TAM",
+        1.0,
+        0.0,
+        "normal",
+        shift_scale=ScaleSpec.from_three_points(0.01, 0.05, 0.25),
+    )
+    factors = {"DemandStrength": FactorState(name="DemandStrength", current_value=0.5)}
+
+    fixed_sample = mc_iteration(
+        factor_states=factors,
+        assumptions=[fixed],
+        stage=stage,
+        regime="normal",
+        company=_company(),
+        rng=np.random.default_rng(101),
+    )
+    hierarchical_sample = mc_iteration(
+        factor_states=factors,
+        assumptions=[hierarchical],
+        stage=stage,
+        regime="normal",
+        company=_company(),
+        rng=np.random.default_rng(101),
+    )
+
+    assert hierarchical_sample == fixed_sample
+
+
 def test_mc_run_reports_outer_indices_for_accepted_samples(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -192,7 +279,14 @@ def test_mc_iteration_mean_reversion_is_monotonic_toward_target(
     assert 0.28 <= later["OPERATING_MARGIN"] <= early["OPERATING_MARGIN"] <= base_mu
 
 
-def _assumption(name: str, mu: float, sigma: float, family: DistributionFamily) -> AssumptionState:
+def _assumption(
+    name: str,
+    mu: float,
+    sigma: float,
+    family: DistributionFamily,
+    *,
+    shift_scale: ScaleSpec | None = None,
+) -> AssumptionState:
     return AssumptionState(
         name=name,
         distribution_family=family,
@@ -200,7 +294,7 @@ def _assumption(name: str, mu: float, sigma: float, family: DistributionFamily) 
         current_sigma=sigma,
         base_mu=mu,
         base_sigma=sigma,
-        shift_scale=ScaleSpec(center=0.05, uncertainty=0.0),
+        shift_scale=shift_scale or ScaleSpec(center=0.05, uncertainty=0.0),
         constraints={},
         active=True,
     )
