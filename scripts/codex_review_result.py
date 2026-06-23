@@ -139,7 +139,7 @@ def _discord_message(review: Review, issue: str, branch: str, cycle: int) -> str
     limit = 1900 - len(separator) - len(suffix)
     if len(body) > limit:
         body = body[: max(0, limit - 45)].rstrip() + "\n(전체 결과: repo의 REVIEW 파일 참조)"
-    return body + separator + suffix
+    return (body + separator + suffix).replace("<@", "@")
 
 
 def format_review(args: argparse.Namespace) -> None:

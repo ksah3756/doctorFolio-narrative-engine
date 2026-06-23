@@ -228,7 +228,14 @@ import json
 import sys
 from pathlib import Path
 
-print(json.dumps({"content": Path(sys.argv[1]).read_text()}))
+print(
+    json.dumps(
+        {
+            "content": Path(sys.argv[1]).read_text(),
+            "allowed_mentions": {"parse": []},
+        }
+    )
+)
 PY
 )"
   response="$(curl -sS --fail --max-time 15 -X POST "$endpoint" \
@@ -307,6 +314,12 @@ fi
 git_writable_root="sandbox_workspace_write.writable_roots=[\"$PROJECT_DIR/.git\"]"
 
 run_implementation "$prompt_file" || exit $?
+
+if [[ "${AUTO_LOOP_DISABLE_DISCORD:-0}" != "1" && ! -f "$STATE_FILE" ]]; then
+  write_status "failed" 1 "review_state"
+  echo "[codex-task] review state file not found: $STATE_FILE" >&2
+  exit 1
+fi
 
 review_cycle="$(state_value review_cycle)"
 [[ "$review_cycle" =~ ^[0-9]+$ ]] || review_cycle=0

@@ -50,18 +50,13 @@ def _auto_loop_env(
 
     proposed_at = "2026-06-23T00:00:00Z" if phase == "awaiting_approval" else "null"
     (state_dir / "work-status.md").write_text(
-        "---\n"
-        f"phase: {phase}\n"
-        f"proposed_at: {proposed_at}\n"
-        "updated: 2026-06-23T00:00:00Z\n"
-        "---\n"
+        f"---\nphase: {phase}\nproposed_at: {proposed_at}\nupdated: 2026-06-23T00:00:00Z\n---\n"
     )
 
     claude_called = tmp_path / "claude-called"
     _write_executable(
         bin_dir / "claude",
-        "#!/bin/sh\n"
-        'touch "$FAKE_CLAUDE_CALLED"\n',
+        '#!/bin/sh\ntouch "$FAKE_CLAUDE_CALLED"\n',
     )
     env = os.environ.copy()
     env.update(
@@ -96,26 +91,26 @@ def _runner_env(tmp_path: Path, project_dir: Path) -> tuple[dict[str, str], Path
         'for argument in "$@"; do\n'
         '  if [ "$previous" = "--output-last-message" ]; then review_output="$argument"; fi\n'
         '  previous="$argument"\n'
-        'done\n'
+        "done\n"
         'if printf "%s\\n" "$@" | grep -q -- "--output-schema"; then\n'
         '  printf "%s\\n" "$@" > "$FAKE_REVIEW_CODEX_ARGS"\n'
         '  cat > "$FAKE_REVIEW_CODEX_PROMPT"\n'
         '  count=$(cat "$FAKE_REVIEW_COUNT" 2>/dev/null || echo 0)\n'
-        '  count=$((count + 1))\n'
+        "  count=$((count + 1))\n"
         '  echo "$count" > "$FAKE_REVIEW_COUNT"\n'
         '  python3 - "$FAKE_REVIEW_RESULTS" "$count" "$review_output" <<\'PY\'\n'
-        'import json\n'
-        'import sys\n'
-        'from pathlib import Path\n'
-        'results = json.loads(sys.argv[1])\n'
-        'Path(sys.argv[3]).write_text(json.dumps(results[int(sys.argv[2]) - 1]))\n'
-        'PY\n'
+        "import json\n"
+        "import sys\n"
+        "from pathlib import Path\n"
+        "results = json.loads(sys.argv[1])\n"
+        "Path(sys.argv[3]).write_text(json.dumps(results[int(sys.argv[2]) - 1]))\n"
+        "PY\n"
         '  exit "${FAKE_REVIEW_EXIT:-0}"\n'
-        'fi\n'
+        "fi\n"
         'printf "%s\\n" "$@" > "$FAKE_CODEX_ARGS"\n'
         'cat > "$FAKE_CODEX_PROMPT"\n'
         'count=$(cat "$FAKE_IMPLEMENTATION_COUNT" 2>/dev/null || echo 0)\n'
-        'count=$((count + 1))\n'
+        "count=$((count + 1))\n"
         'echo "$count" > "$FAKE_IMPLEMENTATION_COUNT"\n'
         "# 새 contract: Codex는 작업을 커밋한다 (runner 커밋 가드 충족).\n"
         'if [ "${FAKE_CODEX_EXIT:-0}" = "0" ]; then\n'
@@ -126,8 +121,7 @@ def _runner_env(tmp_path: Path, project_dir: Path) -> tuple[dict[str, str], Path
     )
     _write_executable(
         bin_dir / "make",
-        "#!/bin/sh\n"
-        'printf "%s\\n" "$@" > "$FAKE_MAKE_ARGS"\n',
+        '#!/bin/sh\nprintf "%s\\n" "$@" > "$FAKE_MAKE_ARGS"\n',
     )
     _write_executable(
         bin_dir / "curl",
@@ -137,10 +131,10 @@ def _runner_env(tmp_path: Path, project_dir: Path) -> tuple[dict[str, str], Path
         'for argument in "$@"; do\n'
         '  if [ "$previous" = "-d" ]; then payload="$argument"; fi\n'
         '  previous="$argument"\n'
-        'done\n'
+        "done\n"
         'printf "%s\\n" "$payload" >> "$FAKE_DISCORD_PAYLOADS"\n'
         'count=$(cat "$FAKE_DISCORD_COUNT" 2>/dev/null || echo 0)\n'
-        'count=$((count + 1))\n'
+        "count=$((count + 1))\n"
         'echo "$count" > "$FAKE_DISCORD_COUNT"\n'
         'printf \'{"id":"%s"}\\n\' "$((9000 + count))"\n',
     )
@@ -207,7 +201,7 @@ def test_direct_codex_runner_uses_high_reasoning_and_records_completion(
     assert "exec" in codex_args
     assert codex_args.index("--ask-for-approval") < codex_args.index("exec")
     assert codex_args[codex_args.index("--ask-for-approval") + 1] == "never"
-    assert "model_reasoning_effort=\"high\"" in codex_args
+    assert 'model_reasoning_effort="high"' in codex_args
     assert "--sandbox" in codex_args
     assert "workspace-write" in codex_args
     # workspace-write 샌드박스의 기본 .git read-only 배제를 무력화해 Codex 커밋을 허용한다.
@@ -336,8 +330,7 @@ def test_review_result_posts_without_mentions_and_arms_current_pr_gate(
 
     assert result.returncode == 0, result.stderr
     payloads = [
-        json.loads(line)
-        for line in (tmp_path / "discord-payloads.jsonl").read_text().splitlines()
+        json.loads(line) for line in (tmp_path / "discord-payloads.jsonl").read_text().splitlines()
     ]
     assert len(payloads) == 1
     content = payloads[0]["content"]
@@ -345,6 +338,7 @@ def test_review_result_posts_without_mentions_and_arms_current_pr_gate(
     assert "P1 0건" in content
     assert "<@" not in content
     assert "Claude" not in content
+    assert payloads[0]["allowed_mentions"] == {"parse": []}
 
     state = (state_dir / "work-status.md").read_text()
     assert "phase: awaiting_pr" in state
@@ -451,7 +445,7 @@ def test_auto_loop_prompts_delegate_without_omc_team() -> None:
 
 def test_auto_loop_codex_fallback_uses_high_reasoning() -> None:
     script = (REPO_ROOT / "scripts" / "auto-loop.sh").read_text()
-    assert "model_reasoning_effort=\"high\"" in script
+    assert 'model_reasoning_effort="high"' in script
 
 
 def test_awaiting_pr_always_defers_to_shell_poller(tmp_path: Path) -> None:
