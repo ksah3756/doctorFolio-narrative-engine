@@ -50,7 +50,9 @@ def test_governance_execution_quality_raises_sales_to_capital_mu() -> None:
 
 
 def test_financial_health_decrease_inverts_default_probability_mu_sign() -> None:
-    assumption = _assumption("DEFAULT_PROBABILITY", 0.20, 0.01)
+    # base_mu는 NARRATIVE_DEFAULT_PROBABILITY_CAP(0.05) 안쪽으로 둔다.
+    # 0.20처럼 cap 위면 baseline·shifted가 모두 0.05로 눌려 방향성이 안 보인다.
+    assumption = _assumption("DEFAULT_PROBABILITY", 0.03, 0.01)
     factors = route_claims_to_factors([_claim("FINANCIAL_HEALTH", "DECREASE")], "mature")
 
     baseline = _loaded_mu(assumption, {})
@@ -61,7 +63,7 @@ def test_financial_health_decrease_inverts_default_probability_mu_sign() -> None
 
 
 def test_governance_increase_lowers_default_probability_mu() -> None:
-    assumption = _assumption("DEFAULT_PROBABILITY", 0.20, 0.01)
+    assumption = _assumption("DEFAULT_PROBABILITY", 0.03, 0.01)
     factors = route_claims_to_factors([_claim("GOVERNANCE", "INCREASE")], "mature")
 
     baseline = _loaded_mu(assumption, {})
@@ -84,7 +86,7 @@ def test_claim_signs_reach_reproducible_finite_monte_carlo_paths() -> None:
     }
     assumptions = [
         _assumption("SALES_TO_CAPITAL_RATIO", 2.80, 0.0),
-        _assumption("DEFAULT_PROBABILITY", 0.20, 0.0),
+        _assumption("DEFAULT_PROBABILITY", 0.03, 0.0),
     ]
     config = MonteCarloConfig(iterations=128, seed=20260623, t_year=1.0)
 
@@ -96,7 +98,12 @@ def test_claim_signs_reach_reproducible_finite_monte_carlo_paths() -> None:
         first.samples["SALES_TO_CAPITAL_RATIO"]
         > baseline.samples["SALES_TO_CAPITAL_RATIO"]
     )
-    assert np.all(first.samples["DEFAULT_PROBABILITY"] > baseline.samples["DEFAULT_PROBABILITY"])
+    # DEFAULT_PROBABILITY는 0.05 cap 근처로 압축돼 표본별 엄격 순서는 factor sampling noise로
+    # 깨질 수 있다. 부호(집계 방향)는 평균으로 확인한다.
+    assert (
+        first.samples["DEFAULT_PROBABILITY"].mean()
+        > baseline.samples["DEFAULT_PROBABILITY"].mean()
+    )
     for name, samples in first.samples.items():
         assert np.isfinite(samples).all(), name
         np.testing.assert_array_equal(samples, second.samples[name])
