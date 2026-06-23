@@ -618,6 +618,12 @@ def test_active_review_flow_uses_only_conditional_claude_escalation() -> None:
     assert "awaiting_claude_review" in review_flow
 
 
+def test_codex_output_schema_uses_only_supported_array_keywords() -> None:
+    schema = json.loads((REPO_ROOT / "scripts/codex-review-schema.json").read_text())
+
+    assert "uniqueItems" not in schema["properties"]["escalation_reasons"]
+
+
 def test_auto_loop_prompts_delegate_without_omc_team() -> None:
     for prompt_name in ("auto-loop-prompt.md", "codex-auto-loop-prompt.md"):
         prompt = (REPO_ROOT / "scripts" / prompt_name).read_text()
