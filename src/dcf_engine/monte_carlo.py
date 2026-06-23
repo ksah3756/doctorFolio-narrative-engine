@@ -14,7 +14,7 @@ from dcf_engine.assumption import AssumptionState
 from dcf_engine.distributions import params_from_moments, sample_distribution
 from dcf_engine.factor import FactorState, Regime
 from dcf_engine.lifecycle import LifecycleStage
-from dcf_engine.loading import LOADING, apply_constraints, apply_mean_reversion
+from dcf_engine.loading import shifted_mu
 from dcf_engine.validation import passes_imputed_roic_check
 
 
@@ -118,9 +118,13 @@ def mc_iteration(
     for assumption in assumptions:
         if not assumption.active:
             continue
-        mu = _shifted_mu(assumption, sampled_factors)
-        mu = apply_mean_reversion(assumption.with_mu(mu), t_year=t_year, company=company)
-        mu = apply_constraints(mu, assumption, company)
+        mu = _shifted_mu(
+            assumption,
+            sampled_factors,
+            stage=stage,
+            company=company,
+            t_year=t_year,
+        )
         params = params_from_moments(
             assumption.distribution_family,
             mu,
@@ -172,12 +176,21 @@ def _sample_factors(
     }
 
 
-def _shifted_mu(assumption: AssumptionState, sampled_factors: Mapping[str, float]) -> float:
-    loading = LOADING.get(assumption.name, {})
-    mu_shift = sum(
-        loading[name] * sampled_factors[name] for name in loading if name in sampled_factors
+def _shifted_mu(
+    assumption: AssumptionState,
+    sampled_factors: Mapping[str, float],
+    *,
+    stage: LifecycleStage | None = None,
+    company: Mapping[str, float] | None = None,
+    t_year: float = 0.0,
+) -> float:
+    return shifted_mu(
+        assumption,
+        sampled_factors,
+        stage=stage,
+        company=company,
+        t_year=t_year,
     )
-    return assumption.base_mu + mu_shift * assumption.shift_scale.center
 
 
 def _transpose_samples(samples: list[dict[str, float]]) -> dict[str, np.ndarray]:

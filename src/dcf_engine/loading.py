@@ -57,6 +57,32 @@ LOADING: Final[dict[str, dict[str, float]]] = {
 }
 
 
+def shifted_mu(
+    assumption: AssumptionState,
+    factors: Mapping[str, float],
+    *,
+    stage: LifecycleStage | None = None,
+    company: Mapping[str, float] | None = None,
+    t_year: float = 0.0,
+) -> float:
+    factor_loadings = LOADING.get(assumption.name, {})
+    mu_shift = sum(
+        factor_loadings[name] * factors[name] for name in factor_loadings if name in factors
+    )
+    next_mu = assumption.base_mu + mu_shift * assumption.shift_scale.center
+    # 기존 2인자 호출은 loading shift만 계산하므로 company가 없으면 후처리를 생략한다.
+    if company is None:
+        return next_mu
+    # stage별 보정은 아직 없지만 두 호출 경로가 같은 valuation context를 전달하게 한다.
+    _ = stage
+    reverted_mu = apply_mean_reversion(
+        replace(assumption, current_mu=next_mu),
+        t_year=t_year,
+        company=company,
+    )
+    return apply_constraints(reverted_mu, assumption, company)
+
+
 def apply_factor_loadings(
     assumptions: list[AssumptionState],
     factors: Mapping[str, FactorState],
@@ -66,21 +92,18 @@ def apply_factor_loadings(
     t_year: float,
 ) -> dict[str, AssumptionState]:
     shifted: dict[str, AssumptionState] = {}
+    factor_values = {name: factor.current_value for name, factor in factors.items()}
     for assumption in assumptions:
         if not assumption.active:
             continue
-        mu_shift = sum(
-            loading * factors[name].current_value
-            for name, loading in LOADING.get(assumption.name, {}).items()
-            if name in factors
+        next_mu = shifted_mu(
+            assumption,
+            factor_values,
+            stage=stage,
+            company=company,
+            t_year=t_year,
         )
-        scale = assumption.shift_scale.center
-        next_mu = assumption.base_mu + mu_shift * scale
-        next_mu = apply_mean_reversion(
-            replace(assumption, current_mu=next_mu), t_year=t_year, company=company
-        )
-        constrained_mu = apply_constraints(next_mu, assumption, company)
-        shifted[assumption.name] = replace(assumption, current_mu=constrained_mu)
+        shifted[assumption.name] = replace(assumption, current_mu=next_mu)
     return shifted
 
 
