@@ -148,10 +148,11 @@ Inspect only `.auto-loop/tasks/issue-<N>.json`:
 - `escalated`: state should already be `awaiting_claude_review`; do not invoke another
   scheduled LLM or repeat the Discord mention.
 
-## phase: awaiting_claude_review — Owned By Discord-Triggered Claude
+## phase: awaiting_claude_review — Owned By Claude
 
-Do not review, read Discord, or mutate state from the scheduled Codex runner. The one
-conditional Discord mention owns this phase. Leave state unchanged and stop.
+Do not review, read Discord, or mutate state from a Codex runner. The Discord-triggered
+Claude session or the next scheduled Claude-only retry owns this phase. A Claude session
+limit must leave state unchanged for another Claude retry; never substitute Codex.
 
 ## phase: awaiting_pr — Owned By The 10-Minute Shell Poller
 

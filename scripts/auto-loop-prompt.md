@@ -111,9 +111,10 @@
 
 ---
 
-## phase: awaiting_claude_review — Discord 조건부 Claude 리뷰
-정각 launchd 경로에서는 이 phase를 처리하지 않고 즉시 종료한다. Claude 봇 멘션으로 열린
-세션에서만 현재 issue/branch/state를 재검증한 뒤 아래를 수행한다.
+## phase: awaiting_claude_review — 조건부 Claude 리뷰
+Discord 봇 멘션으로 열린 세션 또는 다음 정각의 Claude 재시도에서 현재 issue/branch/state를
+재검증한 뒤 아래를 수행한다. Claude 세션 리미트면 상태를 유지해 다음 정각에 다시 시도하며,
+이 필수 리뷰를 Codex로 대체하지 않는다.
 
 1. Codex 리뷰와 diff를 독립적으로 검토하고 `REVIEW-CLAUDE-<review_cycle>.md`를 작성한다.
 2. P1이 있으면 수정 brief를 작성해 `scripts/dispatch-codex-task.sh`로 Codex에 재위임하고
