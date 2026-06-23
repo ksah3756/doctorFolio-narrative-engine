@@ -471,7 +471,7 @@ def test_numeric_core_change_escalates_even_when_codex_finds_no_p1(
         {
             "AUTO_LOOP_DISABLE_DISCORD": "0",
             "DISCORD_WEBHOOK_URL": "https://discord.invalid/webhook",
-            "FAKE_IMPLEMENTATION_PATH": "src/dcf_engine/monte_carlo.py",
+            "FAKE_IMPLEMENTATION_PATH": "src/dcf_engine/mature_case.py",
         }
     )
 
