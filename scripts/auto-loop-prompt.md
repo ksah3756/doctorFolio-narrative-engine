@@ -96,7 +96,8 @@
 ## phase: implementing  — 구현·독립 리뷰 래퍼 소유
 이 phase에서 직접 리뷰하거나 Discord 완료 신호를 조회하지 않는다.
 `scripts/run-codex-task.sh`가 구현 검증, 별도 Codex 리뷰, P1 재작업, 멘션 없는 결과 게시,
-승인 gate 설정까지 한 흐름으로 처리한다.
+승인 gate 설정까지 한 흐름으로 처리한다. 승인된 리뷰는 반환된 Discord 메시지 ID를
+`pr_approval_message_id`에 저장한 뒤에만 gate를 연다.
 
 `.auto-loop/tasks/issue-<N>.json`만 확인한다.
 - `running`: 작업 중이므로 상태 변경 없이 종료.

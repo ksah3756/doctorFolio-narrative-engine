@@ -133,7 +133,8 @@ Implementation Handoff immediately, advance to `phase: implementing`, and stop.
 
 Do not review code or read Discord in this phase. `scripts/run-codex-task.sh` owns the
 implementation verification, independent Codex review, P1 remediation loop,
-mention-free result delivery, and PR approval gate transition.
+mention-free result delivery, and PR approval gate transition. It persists the
+returned Discord message ID as `pr_approval_message_id` before arming that gate.
 
 Inspect only `.auto-loop/tasks/issue-<N>.json`:
 

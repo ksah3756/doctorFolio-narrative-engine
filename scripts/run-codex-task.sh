@@ -54,6 +54,7 @@ EVENT_LOG="$LOG_DIR/codex-issue-$issue.jsonl"
 FINAL_MESSAGE="$LOG_DIR/codex-issue-$issue-final.md"
 STATE_FILE="$PROJECT_DIR/.auto-loop/work-status.md"
 REVIEW_SCHEMA="$SCRIPT_DIR/codex-review-schema.json"
+REVIEW_RESULT_TOOL="$SCRIPT_DIR/codex_review_result.py"
 MAX_REVIEW_CYCLES=3
 
 [[ -x "$CODEX_BIN" ]] || die "codex binary not found: ${CODEX_BIN:-unset}"
@@ -61,6 +62,7 @@ command -v git >/dev/null 2>&1 || die "git is required"
 command -v make >/dev/null 2>&1 || die "make is required"
 command -v python3 >/dev/null 2>&1 || die "python3 is required"
 [[ -f "$REVIEW_SCHEMA" ]] || die "review schema not found: $REVIEW_SCHEMA"
+[[ -f "$REVIEW_RESULT_TOOL" ]] || die "review result tool not found: $REVIEW_RESULT_TOOL"
 
 mkdir -p "$TASK_DIR" "$LOG_DIR"
 
@@ -160,61 +162,13 @@ update_review_state() {
   local message_id="${3:-null}"
   [[ -f "$STATE_FILE" ]] || return 0
 
-  STATE_FILE="$STATE_FILE" ISSUE="$issue" BRANCH="$branch" CYCLE="$cycle" \
-    REVIEW_STATUS="$status" MESSAGE_ID="$message_id" python3 - <<'PY'
-import os
-from datetime import UTC, datetime
-from pathlib import Path
-
-path = Path(os.environ["STATE_FILE"])
-lines = path.read_text().splitlines()
-end = next(index for index in range(1, len(lines)) if lines[index] == "---")
-
-values: dict[str, str] = {}
-for line in lines[1:end]:
-    key, separator, raw = line.partition(":")
-    if separator:
-        values[key] = raw.split("#", 1)[0].strip()
-
-if (
-    values.get("phase") != "implementing"
-    or values.get("issue") != os.environ["ISSUE"]
-    or values.get("branch") != os.environ["BRANCH"]
-):
-    raise SystemExit("current auto-loop task changed while review was running")
-
-status = os.environ["REVIEW_STATUS"]
-replacements = {
-    "review_cycle": os.environ["CYCLE"],
-    "status": status,
-    "updated": datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
-}
-if status == "APPROVED":
-    message_id = os.environ["MESSAGE_ID"]
-    if not message_id.isdigit():
-        raise SystemExit("approved review is missing a Discord message id")
-    replacements["phase"] = "awaiting_pr"
-    replacements["pr_approval_message_id"] = message_id
-
-seen: set[str] = set()
-for index in range(1, end):
-    key = lines[index].split(":", 1)[0]
-    if key not in replacements:
-        continue
-    comment = ""
-    if "#" in lines[index]:
-        comment = "  #" + lines[index].split("#", 1)[1]
-    lines[index] = f"{key}: {replacements[key]}{comment}"
-    seen.add(key)
-for key, value in replacements.items():
-    if key not in seen:
-        lines.insert(end, f"{key}: {value}")
-        end += 1
-
-temporary = path.with_suffix(".tmp")
-temporary.write_text("\n".join(lines) + "\n")
-temporary.replace(path)
-PY
+  python3 "$REVIEW_RESULT_TOOL" state \
+    --state-file "$STATE_FILE" \
+    --issue "$issue" \
+    --branch "$branch" \
+    --cycle "$cycle" \
+    --status "$status" \
+    --message-id "$message_id"
 }
 
 write_review_prompt() {
@@ -245,102 +199,14 @@ format_review() {
   local discord_message="$4"
   local fix_prompt="$5"
 
-  REVIEW_JSON="$review_json" REVIEW_REPORT="$review_report" DISCORD_MESSAGE="$discord_message" \
-    FIX_PROMPT="$fix_prompt" ISSUE="$issue" BRANCH="$branch" CYCLE="$cycle" python3 - <<'PY'
-import json
-import os
-from pathlib import Path
-
-payload = json.loads(Path(os.environ["REVIEW_JSON"]).read_text())
-required = {"status", "summary", "p1_findings", "p2_findings"}
-if set(payload) != required:
-    raise SystemExit("review result has unexpected fields")
-status = payload["status"]
-p1 = payload["p1_findings"]
-p2 = payload["p2_findings"]
-if status not in {"APPROVED", "NEEDS_REVISION"}:
-    raise SystemExit("invalid review status")
-if not isinstance(payload["summary"], str) or not isinstance(p1, list) or not isinstance(p2, list):
-    raise SystemExit("invalid review result types")
-if (status == "APPROVED") != (len(p1) == 0):
-    raise SystemExit("review status and P1 count disagree")
-for finding in [*p1, *p2]:
-    if not isinstance(finding, dict) or set(finding) != {"location", "issue", "fix"}:
-        raise SystemExit("invalid review finding")
-
-cycle = int(os.environ["CYCLE"])
-issue = os.environ["ISSUE"]
-branch = os.environ["BRANCH"]
-verdict = "APPROVE" if not p1 else "REVISE"
-
-def report_findings(items: list[dict[str, str]]) -> list[str]:
-    if not items:
-        return ["- 없음"]
-    lines: list[str] = []
-    for item in items:
-        lines.extend(
-            [
-                f"- [ ] `{item['location']}` — {item['issue']}",
-                f"  - 수정: {item['fix']}",
-            ]
-        )
-    return lines
-
-report_lines = [
-    "---",
-    f"cycle: {cycle}",
-    f"branch: {branch}",
-    f"status: {status}",
-    f"p1_count: {len(p1)}",
-    f"p2_count: {len(p2)}",
-    "---",
-    f"## Summary\n{payload['summary']}",
-    "## P1 (must fix)",
-    *report_findings(p1),
-    "## P2 (optional)",
-    *report_findings(p2),
-    "## Implementer Response",
-    "<!-- Codex implementer fills this -->",
-    f"## Verdict: {verdict}",
-]
-Path(os.environ["REVIEW_REPORT"]).write_text("\n".join(report_lines) + "\n")
-
-discord_lines = [
-    f"[Codex Review] #{issue} 독립 리뷰 {cycle}차",
-    f"결과: P1 {len(p1)}건 / P2 {len(p2)}건",
-    payload["summary"],
-]
-for label, items in (("P1", p1), ("P2", p2)):
-    for item in items:
-        discord_lines.append(f"- {label} {item['location']}: {item['issue']} → {item['fix']}")
-tail: list[str] = []
-if not p1:
-    tail = [
-        f"브랜치: {branch}",
-        "PR 생성+머지를 승인하려면 이 메시지 이후 `ㄱㄱ` 또는 `go`만 보내세요.",
-    ]
-elif cycle >= 3:
-    tail = ["3회 리뷰 후에도 P1이 남아 자동 재작업을 중단합니다."]
-body = "\n".join(discord_lines)
-suffix = "\n".join(tail)
-separator = "\n" if suffix else ""
-limit = 1900 - len(separator) - len(suffix)
-if len(body) > limit:
-    body = body[: max(0, limit - 45)].rstrip() + "\n(전체 결과: repo의 REVIEW 파일 참조)"
-message = body + separator + suffix
-Path(os.environ["DISCORD_MESSAGE"]).write_text(message)
-
-if p1:
-    report = Path(os.environ["REVIEW_REPORT"]).read_text()
-    Path(os.environ["FIX_PROMPT"]).write_text(
-        f"Issue #{issue} branch {branch}의 독립 Codex 리뷰 P1을 수정하세요.\n\n"
-        f"{report}\n"
-        "P1만 범위 내에서 strict TDD로 수정하고 make verify를 통과시키세요. "
-        "테스트와 구현 커밋을 분리하고 Lore commit protocol을 따르세요. "
-        "종료 전 반드시 변경을 커밋하며 PR은 생성하지 마세요.\n"
-    )
-print(len(p1))
-PY
+  python3 "$REVIEW_RESULT_TOOL" format \
+    --review-json "$review_json" \
+    --review-report "$review_report" \
+    --discord-message "$discord_message" \
+    --fix-prompt "$fix_prompt" \
+    --issue "$issue" \
+    --branch "$branch" \
+    --cycle "$cycle"
 }
 
 post_review() {
