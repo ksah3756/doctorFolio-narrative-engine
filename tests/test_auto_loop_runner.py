@@ -6,8 +6,6 @@ import shutil
 import subprocess
 from pathlib import Path
 
-import pytest
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
 AUTO_LOOP = REPO_ROOT / "scripts" / "auto-loop.sh"
 RUNNER = REPO_ROOT / "scripts" / "run-codex-task.sh"
@@ -231,11 +229,7 @@ def test_auto_loop_codex_fallback_uses_high_reasoning() -> None:
     assert "model_reasoning_effort=\"high\"" in script
 
 
-@pytest.mark.parametrize("phase", ["awaiting_approval", "awaiting_pr"])
-def test_waiting_phase_skips_llm_without_new_user_message(
-    tmp_path: Path,
-    phase: str,
-) -> None:
+def test_awaiting_pr_skips_llm_without_new_user_message(tmp_path: Path) -> None:
     messages: list[dict[str, object]] = [
         {
             "timestamp": "2026-06-23T00:30:00Z",
@@ -248,7 +242,7 @@ def test_waiting_phase_skips_llm_without_new_user_message(
             "content": "unrelated user chatter",
         },
     ]
-    project_dir, env, claude_called = _auto_loop_env(tmp_path, phase, messages)
+    project_dir, env, claude_called = _auto_loop_env(tmp_path, "awaiting_pr", messages)
 
     result = subprocess.run(
         [str(project_dir / "scripts" / "auto-loop.sh")],
@@ -263,6 +257,26 @@ def test_waiting_phase_skips_llm_without_new_user_message(
     assert not claude_called.exists()
     log = (project_dir / ".auto-loop/logs/auto-loop.log").read_text()
     assert "LLM 호출 생략" in log
+
+
+def test_legacy_awaiting_approval_runs_without_new_user_message(tmp_path: Path) -> None:
+    project_dir, env, claude_called = _auto_loop_env(
+        tmp_path,
+        "awaiting_approval",
+        [],
+    )
+
+    result = subprocess.run(
+        [str(project_dir / "scripts" / "auto-loop.sh")],
+        cwd=project_dir,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert claude_called.exists()
 
 
 def test_waiting_phase_wakes_llm_for_new_designated_user_message(tmp_path: Path) -> None:
@@ -315,6 +329,16 @@ def test_waiting_phase_falls_back_to_llm_when_discord_preflight_fails(
     assert claude_called.exists()
     log = (project_dir / ".auto-loop/logs/auto-loop.log").read_text()
     assert "preflight 실패" in log
+
+
+def test_idle_prompts_auto_start_without_implementation_approval() -> None:
+    claude_prompt = (REPO_ROOT / "scripts" / "auto-loop-prompt.md").read_text()
+    codex_prompt = (REPO_ROOT / "scripts" / "codex-auto-loop-prompt.md").read_text()
+
+    assert "승인 대기 없이 즉시 착수" in claude_prompt
+    assert "without waiting for implementation approval" in codex_prompt
+    assert "phase idle→implementing" in claude_prompt
+    assert "phase idle→implementing" in codex_prompt
 
 
 def test_lesson_recorder_writes_structured_entry_and_deduplicates(tmp_path: Path) -> None:
