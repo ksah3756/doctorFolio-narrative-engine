@@ -304,6 +304,8 @@ def test_review_result_posts_without_mentions_and_arms_current_pr_gate(
     )
     prompt_file = project_dir / "task.md"
     prompt_file.write_text("Implement the approved issue.\n")
+    legacy_review = project_dir / "REVIEW-1.md"
+    legacy_review.write_text("another issue review\n")
     env, _, _ = _runner_env(tmp_path, project_dir)
     env.update(
         {
@@ -358,6 +360,8 @@ def test_review_result_posts_without_mentions_and_arms_current_pr_gate(
     assert "<@" not in content
     assert "Claude" not in content
     assert payloads[0]["allowed_mentions"] == {"parse": []}
+    assert legacy_review.read_text() == "another issue review\n"
+    assert (project_dir / "REVIEW-44-1.md").exists()
 
     state = (state_dir / "work-status.md").read_text()
     assert "phase: awaiting_pr" in state

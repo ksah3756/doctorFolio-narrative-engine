@@ -388,7 +388,7 @@ git diff --name-only "$review_base...HEAD" > "$changed_files"
 review_cycle=$((review_cycle + 1))
 review_prompt="$TASK_DIR/issue-$issue-review-$review_cycle-prompt.md"
 review_json="$LOG_DIR/codex-review-issue-$issue-$review_cycle.json"
-review_report="$PROJECT_DIR/REVIEW-$review_cycle.md"
+review_report="$PROJECT_DIR/REVIEW-$issue-$review_cycle.md"
 discord_message="$LOG_DIR/codex-review-issue-$issue-$review_cycle-discord.md"
 fix_prompt="$TASK_DIR/issue-$issue-review-$review_cycle-fix.md"
 write_review_prompt "$review_cycle" "$review_prompt"
