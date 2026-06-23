@@ -6,7 +6,16 @@ import re
 from datetime import date
 from typing import Final, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    TypeAdapter,
+    ValidationError,
+    ValidationInfo,
+    field_validator,
+    model_validator,
+)
 
 type ClaimSubject = Literal[
     "DEMAND_SIGNAL",
@@ -25,6 +34,15 @@ type ClaimNature = Literal["REALIZED", "GUIDANCE", "EXTERNAL", "STRUCTURAL", "RI
 type ClaimDirection = Literal["INCREASE", "DECREASE", "NEUTRAL"]
 type MagnitudeQualifier = Literal["WEAK", "MODERATE", "STRONG", "EXTREME"]
 type MacroVariable = Literal["RATE", "INFLATION", "FX", "COMMODITY"]
+type CapitalStructureInstrument = Literal[
+    "corporate_bond",
+    "bank_loan",
+    "lease",
+    "stock_option",
+    "minority_stake",
+    "equity_issuance",
+    "treasury_stock",
+]
 type DiscoveryChannel = Literal[
     "naver_news",
     "google_news",
@@ -33,6 +51,10 @@ type DiscoveryChannel = Literal[
     "edgar_api",
     "dart_api",
 ]
+
+CAPITAL_STRUCTURE_INSTRUMENT_ADAPTER: Final[
+    TypeAdapter[CapitalStructureInstrument]
+] = TypeAdapter(CapitalStructureInstrument)
 
 SOURCE_RELIABILITY: Final[dict[str, float]] = {
     "10-K": 0.95,
@@ -123,6 +145,13 @@ class Claim(BaseModel):
             raise ValueError("hard extraction quality gate failed")
         if self.claim_subject == "MACRO_EXPOSURE" and self.macro_variable is None:
             raise ValueError("macro_variable is required for MACRO_EXPOSURE")
+        if self.claim_subject == "CAPITAL_STRUCTURE":
+            if self.instrument_type is None:
+                raise ValueError("instrument_type is required for CAPITAL_STRUCTURE")
+            try:
+                CAPITAL_STRUCTURE_INSTRUMENT_ADAPTER.validate_python(self.instrument_type)
+            except ValidationError as error:
+                raise ValueError("instrument_type is invalid for CAPITAL_STRUCTURE") from error
         return self
 
     @field_validator("macro_variable")

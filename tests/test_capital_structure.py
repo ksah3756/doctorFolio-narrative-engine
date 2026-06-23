@@ -1,7 +1,7 @@
+import math
 from collections.abc import Callable
 from dataclasses import replace
 from datetime import date
-import math
 
 import pytest
 from pydantic import ValidationError
