@@ -102,35 +102,29 @@ def apply_capital_structure_claims(base: BridgeInputs, claims: list[Claim]) -> B
     # 원본 component 기준 변화율을 합산해 claim 순서와 무관하게 결정론적으로 갱신한다.
     return replace(
         base,
-        interest_bearing_debt=max(
-            base.interest_bearing_debt
-            * (
-                UNCHANGED_COMPONENT_MULTIPLIER
-                + component_percent_changes["interest_bearing_debt"]
-            ),
-            MIN_BRIDGE_VALUE,
+        interest_bearing_debt=_apply_percent_change(
+            base.interest_bearing_debt,
+            component_percent_changes["interest_bearing_debt"],
         ),
-        lease_liability=max(
-            base.lease_liability
-            * (
-                UNCHANGED_COMPONENT_MULTIPLIER
-                + component_percent_changes["lease_liability"]
-            ),
-            MIN_BRIDGE_VALUE,
+        lease_liability=_apply_percent_change(
+            base.lease_liability,
+            component_percent_changes["lease_liability"],
         ),
-        option_value=max(
-            base.option_value
-            * (UNCHANGED_COMPONENT_MULTIPLIER + component_percent_changes["option_value"]),
-            MIN_BRIDGE_VALUE,
+        option_value=_apply_percent_change(
+            base.option_value,
+            component_percent_changes["option_value"],
         ),
-        minority_interest=max(
-            base.minority_interest
-            * (
-                UNCHANGED_COMPONENT_MULTIPLIER
-                + component_percent_changes["minority_interest"]
-            ),
-            MIN_BRIDGE_VALUE,
+        minority_interest=_apply_percent_change(
+            base.minority_interest,
+            component_percent_changes["minority_interest"],
         ),
+    )
+
+
+def _apply_percent_change(value: float, percent_change: float) -> float:
+    return max(
+        value * (UNCHANGED_COMPONENT_MULTIPLIER + percent_change),
+        MIN_BRIDGE_VALUE,
     )
 
 
