@@ -117,7 +117,8 @@ updates `.auto-loop/tasks/issue-<N>.json`, and sends the completion notification
 
 5. Update `.auto-loop/work-status.md`:
    `phase: implementing`, `issue: <N>`, `branch: feat/<N>-slug`,
-   `delegated_at: <current ISO timestamp>`, `review_cycle: 0`, `updated: ...`.
+   `delegated_at: <current ISO timestamp>`, `review_cycle: 0`,
+   `pr_approval_message_id: null`, `updated: ...`.
 6. Send Discord: `[Codex] 🚀 #<N> Codex 구현 착수`.
 7. Stop.
 
@@ -182,41 +183,31 @@ scripts/dispatch-codex-task.sh \
 
 If P1 count is zero:
 
-- set `phase: awaiting_pr`
-- increment/update `review_cycle`
-- send Discord:
+- send Discord first:
 
 ```text
 <@1131404924094251099>
 [Codex] ✅ [auto-loop] #<N> 리뷰 통과 (P1 0건)
 브랜치: feat/<N>-slug
-→ PR 올리려면 `ㄱㄱ` 또는 `go`.
+→ PR 생성+머지를 승인하려면 이 메시지 이후 `ㄱㄱ` 또는 `go`만 보내세요.
 ```
 
+- Extract the returned Discord message ID from the reply tool result. If there is no
+  numeric returned Discord message ID, keep `phase: implementing` and do not arm the
+  approval gate.
+- Only after obtaining the ID, atomically set `phase: awaiting_pr`, increment/update
+  `review_cycle`, and set `pr_approval_message_id: <returned Discord message ID>`.
 - stop.
 
 If P1 findings remain after 3 review cycles, mark the review status as
 `ESCALATED`, notify Discord, keep `phase: implementing`, and stop.
 
-## phase: awaiting_pr — Create PR After Approval
+## phase: awaiting_pr — Owned By The 10-Minute Shell Poller
 
-Fetch Discord messages after the review-pass notification.
-
-Branch:
-
-- If approved with `ㄱㄱ` or `go`, create PR:
-  `gh pr create -R ksah3756/doctorFolio-narrative-engine --base main`
-- Send the PR link to Discord.
-- Add the completed item to Done in `.auto-loop/work-status.md`.
-- Reset frontmatter:
-  `phase: idle`, `issue: null`, `branch: null`, `proposed_at: null`,
-  `delegated_at: null`, `review_cycle: 0`, `updated: ...`.
-- Stop.
-
-If feedback/rejection appears, either delegate a targeted Codex fix or ask one
-short Discord clarification, then stop.
-
-If there is no response, leave state unchanged and stop.
+Do not fetch Discord, create a PR, merge, or make an LLM decision in this phase.
+`scripts/pr-approval-poller.sh` checks only designated-user messages after
+`pr_approval_message_id` every ten minutes. It accepts only exact `ㄱㄱ`/`go`, then
+creates and merges the PR and resets state to idle. Leave state unchanged and stop.
 
 ## Exit Rule
 
