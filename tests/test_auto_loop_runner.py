@@ -432,6 +432,7 @@ def test_p1_review_escalates_to_claude_without_automatic_codex_fix(
     assert len(payloads) == 1
     payload = json.loads(payloads[0])
     assert "<@1491798466660139148>" in payload["content"]
+    assert "PR 생성+머지를 승인하려면" not in payload["content"]
     assert payload["allowed_mentions"] == {"users": ["1491798466660139148"]}
     state = (state_dir / "work-status.md").read_text()
     assert "phase: awaiting_claude_review" in state
@@ -491,6 +492,7 @@ def test_numeric_core_change_escalates_even_when_codex_finds_no_p1(
     payload = json.loads((tmp_path / "discord-payloads.jsonl").read_text())
     assert "<@1491798466660139148>" in payload["content"]
     assert "numeric_semantics" in payload["content"]
+    assert "PR 생성+머지를 승인하려면" not in payload["content"]
     state = (state_dir / "work-status.md").read_text()
     assert "phase: awaiting_claude_review" in state
 

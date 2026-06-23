@@ -204,7 +204,12 @@ def _discord_message(review: Review, issue: str, branch: str, cycle: int) -> str
 
 
 def write_escalation(args: argparse.Namespace) -> None:
-    review_message = Path(args.review_message).read_text()
+    review_lines = Path(args.review_message).read_text().splitlines()
+    review_message = "\n".join(
+        line
+        for line in review_lines
+        if not line.startswith("브랜치: ") and "PR 생성+머지를 승인하려면" not in line
+    )
     prefix = [
         f"<@{args.bot_id}>",
         f"[auto-loop] #{args.issue} 조건부 Claude 리뷰 요청",
