@@ -27,23 +27,107 @@ LOCK_DIR="$PROJECT_DIR/.auto-loop/auto-loop.lock"
 STATUS_FILE="$PROJECT_DIR/.auto-loop/work-status.md"
 CLAUDE_BIN="${CLAUDE_BIN:-$HOME/.local/bin/claude}"
 CODEX_BIN="${CODEX_BIN:-$(command -v codex 2>/dev/null || true)}"
+CURL_BIN="${CURL_BIN:-$(command -v curl 2>/dev/null || true)}"
+PYTHON_BIN="${PYTHON_BIN:-$(command -v python3 2>/dev/null || true)}"
 AUTO_LOOP_RUNNER="${AUTO_LOOP_RUNNER:-auto}" # auto | claude | codex
+DISCORD_CHANNEL_ID="1491801767141445655"
+DISCORD_USER_ID="1131404924094251099"
+DISCORD_ENV_FILE="${DISCORD_ENV_FILE:-$HOME/.claude/channels/discord/.env}"
 
 mkdir -p "$LOG_DIR"
 
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >>"$LOG_FILE"; }
 
-current_phase() {
-  awk -F: '
+state_value() {
+  local key="$1"
+  awk -F: -v key="$key" '
     /^---$/ { section += 1; next }
-    section == 1 && $1 == "phase" {
-      value = $2
+    section == 1 && $1 == key {
+      value = $0
+      sub(/^[^:]*:/, "", value)
       sub(/#.*/, "", value)
       gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
       print value
       exit
     }
   ' "$STATUS_FILE" 2>/dev/null
+}
+
+current_phase() {
+  state_value "phase"
+}
+
+discord_token() {
+  local token="${DISCORD_BOT_TOKEN:-}"
+  if [[ -z "$token" && -r "$DISCORD_ENV_FILE" ]]; then
+    token="$(sed -n 's/^DISCORD_BOT_TOKEN=//p' "$DISCORD_ENV_FILE" | head -1)"
+    token="${token#\"}"
+    token="${token%\"}"
+    token="${token#\'}"
+    token="${token%\'}"
+  fi
+  printf '%s' "$token"
+}
+
+# Return 0 when the designated user posted after the phase timestamp, 1 when
+# no relevant message exists, and 2 when preflight cannot make a safe decision.
+has_new_discord_user_message() {
+  local since="$1"
+  local token messages
+
+  [[ -n "$since" && "$since" != "null" ]] || return 2
+  [[ -x "$CURL_BIN" && -x "$PYTHON_BIN" ]] || return 2
+  token="$(discord_token)"
+  [[ -n "$token" ]] || return 2
+
+  messages="$(
+    "$CURL_BIN" -sS --fail --max-time 15 \
+      -H "Authorization: Bot $token" \
+      "https://discord.com/api/v10/channels/$DISCORD_CHANNEL_ID/messages?limit=100"
+  )" || return 2
+
+  printf '%s' "$messages" | "$PYTHON_BIN" -c '
+import json
+import sys
+from datetime import datetime
+
+
+def parse_timestamp(value: str) -> datetime:
+    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        raise ValueError("timezone is required")
+    return parsed
+
+
+try:
+    payload = json.load(sys.stdin)
+    since = parse_timestamp(sys.argv[1])
+except (json.JSONDecodeError, TypeError, ValueError):
+    raise SystemExit(2)
+
+if not isinstance(payload, list):
+    raise SystemExit(2)
+
+user_id = sys.argv[2]
+for message in payload:
+    if not isinstance(message, dict):
+        continue
+    author = message.get("author")
+    if not isinstance(author, dict) or str(author.get("id")) != user_id:
+        continue
+    if author.get("bot") is True:
+        continue
+    timestamp = message.get("timestamp")
+    if not isinstance(timestamp, str):
+        continue
+    try:
+        if parse_timestamp(timestamp) > since:
+            raise SystemExit(0)
+    except ValueError:
+        continue
+
+raise SystemExit(1)
+' "$since" "$DISCORD_USER_ID"
 }
 
 has_claude_session_limit() {
@@ -99,6 +183,21 @@ runner="$AUTO_LOOP_RUNNER"
 
 if [ "$runner" = "auto" ]; then
   runner="claude"
+fi
+
+if [[ "$phase" == "awaiting_pr" ]]; then
+  waiting_since="$(state_value "updated")"
+  has_new_discord_user_message "$waiting_since"
+  preflight_status=$?
+  if [[ "$preflight_status" -eq 1 ]]; then
+    log "phase $phase: 새 Discord 유저 메시지 없음, LLM 호출 생략"
+    exit 0
+  fi
+  if [[ "$preflight_status" -eq 2 ]]; then
+    log "phase $phase: Discord preflight 실패, 기존 LLM 경로로 폴백"
+  else
+    log "phase $phase: 새 Discord 유저 메시지 감지, LLM 실행"
+  fi
 fi
 
 log "===== auto-loop 발화 시작 (phase ${phase:-unknown}, runner $runner) ====="

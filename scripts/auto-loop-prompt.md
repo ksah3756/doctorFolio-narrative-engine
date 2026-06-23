@@ -18,9 +18,9 @@
 ## 절대 가드레일 (위반 금지)
 1. **메인 브랜치를 직접 수정/커밋하지 않는다.** 모든 구현은 `feat/<N>-slug` feature 브랜치에서.
 2. `git push --force`, `git reset --hard`, `rm -rf`, 파괴적 명령 금지.
-3. **승인 게이트는 구현·PR 단계에만 적용된다.** 계획 *구현 착수*는 Discord 승인(`ㄱㄱ`/`go`) 후에만, PR 생성은 리뷰 통과 + 유저 승인 후에만. **단, `idle`에서 신규 작업을 "제안"하는 것은 승인이 필요 없으며 매 idle 틱마다 무조건 수행한다 — 어떤 신호도 기다리지 않는다.**
+3. **구현 착수에는 승인 게이트가 없다.** `idle`에서 계획을 Discord로 알린 뒤 승인 대기 없이 즉시 착수한다. PR 생성만 리뷰 통과 + 유저 승인(`ㄱㄱ`/`go`) 후에 수행한다.
 4. Discord 전송은 `mcp__discord__reply`(channel=위 chat_id)로만. 읽기는 `mcp__discord__fetch_messages`. 사람이 읽는 건 이 메시지뿐이다. (도구는 `--mcp-config`로 주입됨)
-5. 한 발화에서 phase는 **최대 한 칸** 전진. 애매하면 멈추고 상태 유지.
+5. 한 발화에서 phase는 **최대 한 칸** 전진한다(`idle→implementing`은 한 번의 전이). 애매하면 멈추고 상태 유지.
 6. 토큰/도구 에러로 작업 못 하면, 상태 변경 없이 조용히 종료(다음 발화가 재시도).
 7. 코드 구현 자체는 **Codex에 위임**한다. 너(Claude)는 계획·리뷰·PR만 담당한다.
 
@@ -36,7 +36,7 @@
 ---
 
 ## phase: idle  — 다음 작업 제안
-**idle이면 무조건 제안한다 — 승인·`다음`·어떤 신호도 기다리지 않는다.** 제안 자체에는 게이트가 없다(승인 게이트는 제안 *이후* 구현/PR 단계에만). 직전 봇 메시지가 "진행할까요/멈출까요" 류였더라도 무시하고 새 제안을 만든다.
+**idle이면 무조건 계획하고 자동 착수한다.** 계획을 Discord에 알리되 구현 승인·`다음`·어떤 신호도 기다리지 않는다. 직전 봇 메시지가 "진행할까요/멈출까요" 류였더라도 무시한다.
 
 우선순위 체인으로 **딱 하나** 계획을 만든다:
 1. `gh issue list -R ksah3756/doctorFolio-narrative-engine --state open` → 열린 이슈 있으면 최우선 1개 선택.
@@ -53,24 +53,15 @@
   요약: ...
   테스트(TDD): ...
   변경 예상: ...
-  → 진행하려면 `ㄱㄱ` 또는 `go`.
+  → 승인 대기 없이 즉시 착수합니다.
   ```
-- 상태파일 갱신: `phase: awaiting_approval`, `proposed_at: <지금 ISO>`, 본문에 계획 전문 보존.
-- 종료.
+- `proposed_at: <지금 ISO>`와 계획 전문을 상태파일에 보존한 뒤 아래 **자동 착수**를 같은 발화에서 계속 수행한다.
+- `phase: awaiting_approval`로 멈추거나 Discord 응답을 읽지 않는다.
 
----
-
-## phase: awaiting_approval  — 승인 확인
-1. `mcp__discord__fetch_messages`(channel)로 `proposed_at` 이후 **유저 메시지**를 읽는다.
-2. 분기:
-   - **승인(`ㄱㄱ`/`go`)** → 아래 "착수".
-   - **피드백/반려 텍스트** → 반영해 계획 수정, 다시 Discord 전송, `proposed_at` 갱신, phase 유지, 종료.
-   - **무응답** → 상태 변경 없이 종료.
-
-### 착수 (승인됨)
+### 자동 착수 (`idle` 공통)
 1. 연결 이슈 없으면(신규) → `gh issue create -R ksah3756/doctorFolio-narrative-engine`로 이슈 생성, 번호 확보. (AGENTS.md: 이슈=SSoT)
 2. 브랜치명 결정: `feat/<N>-slug`.
-3. `.auto-loop/tasks/issue-<N>-prompt.md`에 승인된 계획과 아래 구현 지시를 보존한다:
+3. `.auto-loop/tasks/issue-<N>-prompt.md`에 작성한 계획과 아래 구현 지시를 보존한다:
    - 현재 브랜치 `feat/<N>-slug`에서 직접 구현한다.
    - strict TDD(Red-Green-Refactor), `make verify`, 테스트/구현 분리 커밋, Lore commit protocol을 따른다.
    - **종료 전 반드시 브랜치에 커밋한다.** staged-only/미커밋 상태로 끝내면 task 실패다
@@ -91,6 +82,13 @@
    Discord 알림을 담당한다.
 5. 상태파일: `phase: implementing`, `issue: <N>`, `branch: feat/<N>-slug`, `delegated_at: <지금>`, `review_cycle: 0`.
 6. Discord에 "🚀 #<N> Codex 구현 착수" 전송 후 종료.
+
+---
+
+## phase: awaiting_approval  — 레거시 상태 자동 마이그레이션
+이 phase는 과거 승인 게이트에서 남은 호환 상태다. Discord 승인 메시지를 조회하지 않는다.
+상태파일 본문의 기존 Proposed Plan을 그대로 사용해 위 **자동 착수**를 즉시 수행하고
+`phase: implementing`으로 전진한 뒤 종료한다.
 
 ---
 
@@ -155,4 +153,4 @@
 매 발화 끝에 `.auto-loop/work-status.md`의 `updated`를 현재 ISO로 갱신.
 발화 중 재사용 가능한 학습이 생겼다면 `scripts/learning-policy.md` 기준으로 판단해
 `scripts/record-auto-loop-lesson.sh`로 한 항목만 기록한다. 정상 상태 전이는 기록하지 않는다.
-무엇을 했는지 한 줄을 stdout으로 남겨라(로그용). 예: `[auto-loop] phase idle→awaiting_approval: proposed #2`.
+무엇을 했는지 한 줄을 stdout으로 남겨라(로그용). 예: `[auto-loop] phase idle→implementing: proposed and dispatched #2`.

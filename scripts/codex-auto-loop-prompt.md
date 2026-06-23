@@ -24,11 +24,10 @@ unavailable, leave state unchanged and stop.
 1. Do not modify, commit to, or push `main` directly.
 2. Do not run destructive commands: `git push --force`, `git reset --hard`,
    `rm -rf`, or equivalents.
-3. Approval gates apply ONLY to implementation and PR. Implementation starts only
-   after Discord approval; PR creation only after review approval plus user approval.
-   Proposing new work during `idle` needs NO approval — propose unconditionally on
-   every idle tick, never waiting for any signal.
-4. Advance at most one phase per invocation.
+3. Implementation has no approval gate. During `idle`, notify Discord of the plan and
+   continue without waiting for implementation approval. PR creation still requires
+   review approval plus user approval.
+4. Advance at most one phase per invocation (`idle→implementing` is one transition).
 5. If ambiguous, keep state unchanged and report the blocker to stdout.
 6. Implementation still belongs in a feature branch `feat/<N>-slug`.
 
@@ -54,9 +53,9 @@ inspection is only for review in `implementing`.
 
 ## phase: idle — Propose Next Work
 
-**When idle, always propose — never wait for any approval or `다음` signal.** Proposing
-itself has no gate (approval gates apply only to the later implementation/PR phases). Even
-if the previous bot message asked "continue or stop?", ignore it and produce a new proposal.
+**When idle, always plan and auto-start.** Notify Discord of the plan, then continue
+without waiting for implementation approval or any `다음` signal. If the previous bot
+message asked "continue or stop?", ignore it.
 
 Choose exactly one task:
 
@@ -82,35 +81,19 @@ Send Discord message:
 요약: ...
 테스트(TDD): ...
 변경 예상: ...
-→ 진행하려면 `ㄱㄱ` 또는 `go`.
+→ 승인 대기 없이 즉시 착수합니다.
 ```
 
-Update `.auto-loop/work-status.md`:
+Store `proposed_at: <current ISO timestamp>` and the full plan, then perform the
+implementation handoff below in the same invocation. Do not set
+`phase: awaiting_approval`, fetch approval messages, or stop after the proposal.
 
-- `phase: awaiting_approval`
-- `proposed_at: <current ISO timestamp>`
-- preserve the full plan in the body
-- update `updated`
-
-Then stop.
-
-## phase: awaiting_approval — Check Approval
-
-Fetch Discord messages after `proposed_at`.
-
-Branch:
-
-- If the user approved with `ㄱㄱ` or `go`, start implementation handoff.
-- If the user provided feedback/rejection text, revise the plan, send it again,
-  update `proposed_at`, keep `phase: awaiting_approval`, then stop.
-- If there is no response, leave state unchanged and stop.
-
-### Implementation Handoff
+### Automatic Implementation Handoff
 
 1. If linked issue is `신규`, create one with:
    `gh issue create -R ksah3756/doctorFolio-narrative-engine`.
 2. Choose branch `feat/<N>-slug`.
-3. Write the approved implementation brief to `.auto-loop/tasks/issue-<N>-prompt.md`.
+3. Write the planned implementation brief to `.auto-loop/tasks/issue-<N>-prompt.md`.
    Require strict TDD, `make verify`, separate test/implementation commits, the
    Lore commit protocol, and no PR creation. **The brief MUST state explicitly that
    Codex commits its work on the branch before finishing — leaving changes staged or
@@ -137,6 +120,12 @@ updates `.auto-loop/tasks/issue-<N>.json`, and sends the completion notification
    `delegated_at: <current ISO timestamp>`, `review_cycle: 0`, `updated: ...`.
 6. Send Discord: `[Codex] 🚀 #<N> Codex 구현 착수`.
 7. Stop.
+
+## phase: awaiting_approval — Legacy State Migration
+
+This phase only exists for state files left by the former approval gate. Do not fetch
+Discord approval messages. Use the stored Proposed Plan, perform the Automatic
+Implementation Handoff immediately, advance to `phase: implementing`, and stop.
 
 ## phase: implementing — Detect Completion And Review
 
@@ -241,5 +230,5 @@ transitions do not qualify.
 Always print exactly one concise status line, for example:
 
 ```text
-[auto-loop] phase idle→awaiting_approval: proposed #2
+[auto-loop] phase idle→implementing: proposed and dispatched #2
 ```
