@@ -114,8 +114,10 @@ def _runner_env(tmp_path: Path, project_dir: Path) -> tuple[dict[str, str], Path
         'echo "$count" > "$FAKE_IMPLEMENTATION_COUNT"\n'
         "# 새 contract: Codex는 작업을 커밋한다 (runner 커밋 가드 충족).\n"
         'if [ "${FAKE_CODEX_EXIT:-0}" = "0" ]; then\n'
-        '  echo "work-$count" > "codex_work_$count.txt"\n'
-        '  git add "codex_work_$count.txt" && git commit -q -m "stub codex work $count"\n'
+        '  work_path="${FAKE_IMPLEMENTATION_PATH:-codex_work_$count.txt}"\n'
+        '  mkdir -p "$(dirname "$work_path")"\n'
+        '  echo "work-$count" > "$work_path"\n'
+        '  git add "$work_path" && git commit -q -m "stub codex work $count"\n'
         "fi\n"
         'exit "${FAKE_CODEX_EXIT:-0}"\n',
     )
@@ -156,6 +158,9 @@ def _runner_env(tmp_path: Path, project_dir: Path) -> tuple[dict[str, str], Path
                     {
                         "status": "APPROVED",
                         "summary": "변경 범위와 테스트가 요구사항을 충족합니다.",
+                        "risk_level": "LOW",
+                        "claude_escalation": False,
+                        "escalation_reasons": [],
                         "p1_findings": [],
                         "p2_findings": [],
                     }
@@ -298,6 +303,9 @@ def test_review_result_posts_without_mentions_and_arms_current_pr_gate(
                     {
                         "status": "APPROVED",
                         "summary": "회귀 테스트와 상태 전이가 일치합니다.",
+                        "risk_level": "LOW",
+                        "claude_escalation": False,
+                        "escalation_reasons": [],
                         "p1_findings": [],
                         "p2_findings": [
                             {
@@ -346,7 +354,7 @@ def test_review_result_posts_without_mentions_and_arms_current_pr_gate(
     assert "pr_approval_message_id: 9001" in state
 
 
-def test_p1_review_automatically_runs_fix_and_a_fresh_second_review(
+def test_p1_review_escalates_to_claude_without_automatic_codex_fix(
     tmp_path: Path,
 ) -> None:
     project_dir = tmp_path / "project"
@@ -376,6 +384,9 @@ def test_p1_review_automatically_runs_fix_and_a_fresh_second_review(
                     {
                         "status": "NEEDS_REVISION",
                         "summary": "승인 상태 저장에 회귀가 있습니다.",
+                        "risk_level": "HIGH",
+                        "claude_escalation": True,
+                        "escalation_reasons": ["p1_finding"],
                         "p1_findings": [
                             {
                                 "location": "scripts/run-codex-task.sh:200",
@@ -383,12 +394,6 @@ def test_p1_review_automatically_runs_fix_and_a_fresh_second_review(
                                 "fix": "issue와 branch를 재검증합니다.",
                             }
                         ],
-                        "p2_findings": [],
-                    },
-                    {
-                        "status": "APPROVED",
-                        "summary": "현재 작업 검증이 추가됐습니다.",
-                        "p1_findings": [],
                         "p2_findings": [],
                     },
                 ]
@@ -413,18 +418,76 @@ def test_p1_review_automatically_runs_fix_and_a_fresh_second_review(
     )
 
     assert result.returncode == 0, result.stderr
-    assert (tmp_path / "implementation-count.txt").read_text().strip() == "2"
-    assert (tmp_path / "review-count.txt").read_text().strip() == "2"
+    assert (tmp_path / "implementation-count.txt").read_text().strip() == "1"
+    assert (tmp_path / "review-count.txt").read_text().strip() == "1"
     payloads = (tmp_path / "discord-payloads.jsonl").read_text().splitlines()
-    assert len(payloads) == 2
-    assert all("<@" not in json.loads(payload)["content"] for payload in payloads)
+    assert len(payloads) == 1
+    payload = json.loads(payloads[0])
+    assert "<@1491798466660139148>" in payload["content"]
+    assert payload["allowed_mentions"] == {"users": ["1491798466660139148"]}
     state = (state_dir / "work-status.md").read_text()
-    assert "phase: awaiting_pr" in state
-    assert "review_cycle: 2" in state
-    assert "pr_approval_message_id: 9002" in state
+    assert "phase: awaiting_claude_review" in state
+    assert "status: CLAUDE_REVIEW" in state
+    assert "review_cycle: 1" in state
+    status = json.loads((state_dir / "tasks/issue-45.json").read_text())
+    assert status["status"] == "escalated"
+    assert status["stage"] == "claude_review"
 
 
-def test_active_review_flow_has_no_claude_review_request_or_bot_mention() -> None:
+def test_numeric_core_change_escalates_even_when_codex_finds_no_p1(
+    tmp_path: Path,
+) -> None:
+    project_dir = tmp_path / "project"
+    project_dir.mkdir()
+    _init_repo(project_dir)
+    state_dir = project_dir / ".auto-loop"
+    state_dir.mkdir()
+    (state_dir / "work-status.md").write_text(
+        "---\n"
+        "phase: implementing\n"
+        "issue: 46\n"
+        "branch: feat/46-numeric-review\n"
+        "review_cycle: 0\n"
+        "pr_approval_message_id: null\n"
+        "updated: 2026-06-23T00:00:00Z\n"
+        "---\n"
+    )
+    prompt_file = project_dir / "task.md"
+    prompt_file.write_text("Adjust mean reversion behavior.\n")
+    env, _, _ = _runner_env(tmp_path, project_dir)
+    env.update(
+        {
+            "AUTO_LOOP_DISABLE_DISCORD": "0",
+            "DISCORD_WEBHOOK_URL": "https://discord.invalid/webhook",
+            "FAKE_IMPLEMENTATION_PATH": "src/dcf_engine/monte_carlo.py",
+        }
+    )
+
+    result = subprocess.run(
+        [
+            str(RUNNER),
+            "--issue",
+            "46",
+            "--branch",
+            "feat/46-numeric-review",
+            "--prompt-file",
+            str(prompt_file),
+        ],
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads((tmp_path / "discord-payloads.jsonl").read_text())
+    assert "<@1491798466660139148>" in payload["content"]
+    assert "numeric_semantics" in payload["content"]
+    state = (state_dir / "work-status.md").read_text()
+    assert "phase: awaiting_claude_review" in state
+
+
+def test_active_review_flow_uses_only_conditional_claude_escalation() -> None:
     active_files = (
         "run-codex-task.sh",
         "auto-loop-prompt.md",
@@ -433,7 +496,9 @@ def test_active_review_flow_has_no_claude_review_request_or_bot_mention() -> Non
     for file_name in active_files:
         content = (REPO_ROOT / "scripts" / file_name).read_text()
         assert "Claude review requested" not in content
-        assert "<@1491798466660139148>" not in content
+    runner = (REPO_ROOT / "scripts/run-codex-task.sh").read_text()
+    assert "CLAUDE_BOT_ID" in runner
+    assert "awaiting_claude_review" in runner
 
 
 def test_auto_loop_prompts_delegate_without_omc_team() -> None:
@@ -471,6 +536,28 @@ def test_awaiting_pr_always_defers_to_shell_poller(tmp_path: Path) -> None:
     assert not claude_called.exists()
     log = (project_dir / ".auto-loop/logs/auto-loop.log").read_text()
     assert "10분 PR 승인 poller" in log
+
+
+def test_awaiting_claude_review_does_not_wake_scheduled_llm(tmp_path: Path) -> None:
+    project_dir, env, claude_called = _auto_loop_env(
+        tmp_path,
+        "awaiting_claude_review",
+        [],
+    )
+
+    result = subprocess.run(
+        [str(project_dir / "scripts" / "auto-loop.sh")],
+        cwd=project_dir,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert not claude_called.exists()
+    log = (project_dir / ".auto-loop/logs/auto-loop.log").read_text()
+    assert "Discord 조건부 Claude 리뷰가 처리" in log
 
 
 def test_legacy_awaiting_approval_runs_without_new_user_message(tmp_path: Path) -> None:
