@@ -78,12 +78,13 @@ def apply_factor_loadings(
     for assumption in assumptions:
         if not assumption.active:
             continue
-        next_mu = shifted_mu_from_factors(assumption, factor_values)
-        next_mu = apply_mean_reversion(
-            replace(assumption, current_mu=next_mu), t_year=t_year, company=company
+        next_mu = resolved_mu(
+            assumption,
+            factor_values,
+            company=company,
+            t_year=t_year,
         )
-        constrained_mu = apply_constraints(next_mu, assumption, company)
-        shifted[assumption.name] = replace(assumption, current_mu=constrained_mu)
+        shifted[assumption.name] = replace(assumption, current_mu=next_mu)
     return shifted
 
 
@@ -91,6 +92,21 @@ def shifted_mu_from_factors(
     assumption: AssumptionState, factor_values: Mapping[str, float]
 ) -> float:
     return assumption.base_mu + narrative_shift_for_assumption(assumption, factor_values)
+
+
+def resolved_mu(
+    assumption: AssumptionState,
+    factor_values: Mapping[str, float],
+    *,
+    company: Mapping[str, float],
+    t_year: float,
+) -> float:
+    # narrative cap, 평균 회귀, 재무 제약 순서를 한 경로에서 고정한다.
+    shifted_mu = shifted_mu_from_factors(assumption, factor_values)
+    reverted_mu = apply_mean_reversion(
+        replace(assumption, current_mu=shifted_mu), t_year=t_year, company=company
+    )
+    return apply_constraints(reverted_mu, assumption, company)
 
 
 def narrative_shift_for_assumption(

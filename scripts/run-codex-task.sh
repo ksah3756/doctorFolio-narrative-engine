@@ -156,8 +156,13 @@ if [[ "$current_branch" != "$branch" ]]; then
   if git show-ref --verify --quiet "refs/heads/$branch"; then
     git switch "$branch" || die "cannot switch to existing branch: $branch"
   else
-    # 신규 작업 브랜치는 항상 최신 origin/main에서 분기한다 (stale HEAD 분기로 인한 충돌 방지).
-    git switch -c "$branch" origin/main || die "cannot create branch from origin/main: $branch"
+    # 신규 작업 브랜치는 최신 origin/main에서 분기한다 (stale HEAD 분기로 인한 충돌 방지).
+    # origin/main이 없으면(원격 미설정/테스트 레포) 현재 HEAD에서 분기로 폴백한다.
+    if git rev-parse --verify --quiet origin/main >/dev/null 2>&1; then
+      git switch -c "$branch" origin/main || die "cannot create branch from origin/main: $branch"
+    else
+      git switch -c "$branch" || die "cannot create branch: $branch"
+    fi
   fi
 fi
 
