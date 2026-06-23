@@ -172,9 +172,15 @@ head_before="$(git rev-parse HEAD)"
 write_status "running" 0 "codex"
 : > "$EVENT_LOG"
 
+# workspace-write 샌드박스는 기본적으로 `!**/.git/**`로 .git을 read-only로 막아
+# Codex 커밋이 EPERM으로 실패한다(#9·#11·#14 재발). 프로젝트 .git을 명시적으로
+# writable_roots에 넣어 이 배제를 무력화하고 TDD 커밋(Red/Green 분리)을 허용한다.
+git_writable_root="sandbox_workspace_write.writable_roots=[\"$PROJECT_DIR/.git\"]"
+
 "$CODEX_BIN" --ask-for-approval never exec \
   --cd "$PROJECT_DIR" \
   --sandbox workspace-write \
+  -c "$git_writable_root" \
   -c 'model_reasoning_effort="high"' \
   --json \
   --output-last-message "$FINAL_MESSAGE" \
