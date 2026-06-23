@@ -1,10 +1,12 @@
 import math
+from statistics import NormalDist
 
 import numpy as np
 import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
+from dcf_engine import distributions as distributions_module
 from dcf_engine.distributions import (
     beta_from_moments,
     lognormal_from_moments,
@@ -13,6 +15,11 @@ from dcf_engine.distributions import (
     t_params_from_moments,
     triangular_from_mu,
 )
+
+LOW_QUANTILE = 0.10
+HIGH_QUANTILE = 0.90
+ROUND_TRIP_REL_TOLERANCE = 1e-10
+ROUND_TRIP_ABS_TOLERANCE = 1e-12
 
 
 @given(
@@ -41,6 +48,61 @@ def test_lognormal_scale_from_median_preserves_median(median: float, std: float)
 
     assert math.exp(mu_ln) == pytest.approx(median, rel=1e-6, abs=1e-9)
     assert sigma_ln > 0
+
+
+@given(
+    median=st.floats(min_value=0.01, max_value=10.0, allow_nan=False, allow_infinity=False),
+    sigma_ln=st.floats(min_value=0.01, max_value=1.5, allow_nan=False, allow_infinity=False),
+)
+@settings(max_examples=60)
+def test_lognormal_scale_from_three_points_round_trips_quantiles(
+    median: float, sigma_ln: float
+) -> None:
+    normal = NormalDist()
+    mu_ln = math.log(median)
+    low = math.exp(mu_ln + sigma_ln * normal.inv_cdf(LOW_QUANTILE))
+    high = math.exp(mu_ln + sigma_ln * normal.inv_cdf(HIGH_QUANTILE))
+
+    recovered_mu, recovered_sigma = distributions_module.lognormal_scale_from_three_points(
+        low, median, high
+    )
+
+    assert math.exp(recovered_mu) == pytest.approx(
+        median,
+        rel=ROUND_TRIP_REL_TOLERANCE,
+        abs=ROUND_TRIP_ABS_TOLERANCE,
+    )
+    assert recovered_sigma == pytest.approx(
+        sigma_ln,
+        rel=ROUND_TRIP_REL_TOLERANCE,
+        abs=ROUND_TRIP_ABS_TOLERANCE,
+    )
+    assert math.exp(recovered_mu + recovered_sigma * normal.inv_cdf(LOW_QUANTILE)) == (
+        pytest.approx(low, rel=ROUND_TRIP_REL_TOLERANCE, abs=ROUND_TRIP_ABS_TOLERANCE)
+    )
+    assert math.exp(recovered_mu + recovered_sigma * normal.inv_cdf(HIGH_QUANTILE)) == (
+        pytest.approx(high, rel=ROUND_TRIP_REL_TOLERANCE, abs=ROUND_TRIP_ABS_TOLERANCE)
+    )
+
+
+@pytest.mark.parametrize(
+    ("low", "base", "high"),
+    [
+        (math.nan, 1.0, 2.0),
+        (0.5, math.inf, 2.0),
+        (0.5, 1.0, -math.inf),
+        (0.0, 1.0, 2.0),
+        (1.0, 1.0, 2.0),
+        (1.5, 1.0, 2.0),
+        (0.5, 2.0, 2.0),
+        (0.5, 3.0, 2.0),
+    ],
+)
+def test_lognormal_scale_from_three_points_rejects_invalid_inputs(
+    low: float, base: float, high: float
+) -> None:
+    with pytest.raises(ValueError):
+        distributions_module.lognormal_scale_from_three_points(low, base, high)
 
 
 def test_beta_from_moments_returns_positive_shape_parameters() -> None:
