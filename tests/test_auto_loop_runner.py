@@ -102,6 +102,11 @@ def test_direct_codex_runner_uses_high_reasoning_and_records_completion(
     assert "model_reasoning_effort=\"high\"" in codex_args
     assert "--sandbox" in codex_args
     assert "workspace-write" in codex_args
+    # workspace-write 샌드박스의 기본 .git read-only 배제를 무력화해 Codex 커밋을 허용한다.
+    assert any(
+        "sandbox_workspace_write.writable_roots" in arg and arg.endswith('/.git"]')
+        for arg in codex_args
+    ), codex_args
     assert codex_prompt_file.read_text() == prompt_file.read_text()
     assert (tmp_path / "make-args.txt").read_text().splitlines() == ["verify"]
 
