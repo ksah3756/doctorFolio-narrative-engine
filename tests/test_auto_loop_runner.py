@@ -10,6 +10,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 AUTO_LOOP = REPO_ROOT / "scripts" / "auto-loop.sh"
 RUNNER = REPO_ROOT / "scripts" / "run-codex-task.sh"
 LESSON_RECORDER = REPO_ROOT / "scripts" / "record-auto-loop-lesson.sh"
+REVIEW_RESULT_TOOL = REPO_ROOT / "scripts" / "codex_review_result.py"
 
 
 def _write_executable(path: Path, content: str) -> None:
@@ -54,15 +55,22 @@ def _auto_loop_env(
     )
 
     claude_called = tmp_path / "claude-called"
+    codex_called = tmp_path / "codex-called"
     _write_executable(
         bin_dir / "claude",
         '#!/bin/sh\ntouch "$FAKE_CLAUDE_CALLED"\n',
+    )
+    _write_executable(
+        bin_dir / "codex",
+        '#!/bin/sh\ntouch "$FAKE_CODEX_CALLED"\n',
     )
     env = os.environ.copy()
     env.update(
         {
             "CLAUDE_BIN": str(bin_dir / "claude"),
             "FAKE_CLAUDE_CALLED": str(claude_called),
+            "CODEX_BIN": str(bin_dir / "codex"),
+            "FAKE_CODEX_CALLED": str(codex_called),
             "FAKE_DISCORD_MESSAGES": json.dumps(discord_messages),
             "HOME": str(tmp_path),
         }
@@ -487,6 +495,104 @@ def test_numeric_core_change_escalates_even_when_codex_finds_no_p1(
     assert "phase: awaiting_claude_review" in state
 
 
+def test_risk_router_covers_provider_architecture_uncertainty_and_explicit_request(
+    tmp_path: Path,
+) -> None:
+    review_json = tmp_path / "review.json"
+    changed_files = tmp_path / "changed-files.txt"
+    review_json.write_text(
+        json.dumps(
+            {
+                "status": "APPROVED",
+                "summary": "검증은 통과했지만 요구사항 해석에 불확실성이 있습니다.",
+                "risk_level": "HIGH",
+                "claude_escalation": True,
+                "escalation_reasons": ["uncertainty"],
+                "p1_findings": [],
+                "p2_findings": [],
+            }
+        )
+    )
+    changed_files.write_text(
+        "pyproject.toml\n"
+        + "\n".join(f"src/new_architecture/module_{index}.py" for index in range(8))
+        + "\n"
+    )
+
+    result = subprocess.run(
+        [
+            "python3",
+            str(REVIEW_RESULT_TOOL),
+            "risk",
+            "--review-json",
+            str(review_json),
+            "--changed-files",
+            str(changed_files),
+            "--cycle",
+            "1",
+            "--force",
+        ],
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+
+    reasons = set(result.stdout.strip().split(","))
+    assert reasons == {
+        "architecture_change",
+        "explicit_request",
+        "external_provider",
+        "uncertainty",
+    }
+
+
+def test_second_failed_review_is_classified_as_repeated_fix_failure(tmp_path: Path) -> None:
+    review_json = tmp_path / "review.json"
+    changed_files = tmp_path / "changed-files.txt"
+    review_json.write_text(
+        json.dumps(
+            {
+                "status": "NEEDS_REVISION",
+                "summary": "수정 후에도 blocker가 남았습니다.",
+                "risk_level": "HIGH",
+                "claude_escalation": True,
+                "escalation_reasons": ["p1_finding"],
+                "p1_findings": [
+                    {
+                        "location": "src/example.py:10",
+                        "issue": "blocker",
+                        "fix": "correct it",
+                    }
+                ],
+                "p2_findings": [],
+            }
+        )
+    )
+    changed_files.write_text("src/example.py\n")
+
+    result = subprocess.run(
+        [
+            "python3",
+            str(REVIEW_RESULT_TOOL),
+            "risk",
+            "--review-json",
+            str(review_json),
+            "--changed-files",
+            str(changed_files),
+            "--cycle",
+            "2",
+        ],
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+
+    assert set(result.stdout.strip().split(",")) == {
+        "p1_finding",
+        "repeated_fix_failure",
+    }
+
+
 def test_active_review_flow_uses_only_conditional_claude_escalation() -> None:
     active_files = (
         "run-codex-task.sh",
@@ -496,9 +602,11 @@ def test_active_review_flow_uses_only_conditional_claude_escalation() -> None:
     for file_name in active_files:
         content = (REPO_ROOT / "scripts" / file_name).read_text()
         assert "Claude review requested" not in content
-    runner = (REPO_ROOT / "scripts/run-codex-task.sh").read_text()
-    assert "CLAUDE_BOT_ID" in runner
-    assert "awaiting_claude_review" in runner
+    review_flow = (REPO_ROOT / "scripts/run-codex-task.sh").read_text() + (
+        REPO_ROOT / "scripts/codex_review_result.py"
+    ).read_text()
+    assert "CLAUDE_BOT_ID" in review_flow
+    assert "awaiting_claude_review" in review_flow
 
 
 def test_auto_loop_prompts_delegate_without_omc_team() -> None:
@@ -534,6 +642,7 @@ def test_awaiting_pr_always_defers_to_shell_poller(tmp_path: Path) -> None:
 
     assert result.returncode == 0, result.stderr
     assert not claude_called.exists()
+    assert not (tmp_path / "codex-called").exists()
     log = (project_dir / ".auto-loop/logs/auto-loop.log").read_text()
     assert "10분 PR 승인 poller" in log
 
@@ -556,11 +665,12 @@ def test_awaiting_claude_review_does_not_wake_scheduled_llm(tmp_path: Path) -> N
 
     assert result.returncode == 0, result.stderr
     assert not claude_called.exists()
+    assert not (tmp_path / "codex-called").exists()
     log = (project_dir / ".auto-loop/logs/auto-loop.log").read_text()
     assert "Discord 조건부 Claude 리뷰가 처리" in log
 
 
-def test_legacy_awaiting_approval_runs_without_new_user_message(tmp_path: Path) -> None:
+def test_legacy_awaiting_approval_runs_codex_without_new_user_message(tmp_path: Path) -> None:
     project_dir, env, claude_called = _auto_loop_env(
         tmp_path,
         "awaiting_approval",
@@ -577,10 +687,11 @@ def test_legacy_awaiting_approval_runs_without_new_user_message(tmp_path: Path) 
     )
 
     assert result.returncode == 0, result.stderr
-    assert claude_called.exists()
+    assert not claude_called.exists()
+    assert (tmp_path / "codex-called").exists()
 
 
-def test_waiting_phase_wakes_llm_for_new_designated_user_message(tmp_path: Path) -> None:
+def test_legacy_waiting_phase_uses_codex_even_with_new_user_message(tmp_path: Path) -> None:
     messages: list[dict[str, object]] = [
         {
             "timestamp": "2026-06-23T00:30:00Z",
@@ -604,7 +715,25 @@ def test_waiting_phase_wakes_llm_for_new_designated_user_message(tmp_path: Path)
     )
 
     assert result.returncode == 0, result.stderr
-    assert claude_called.exists()
+    assert not claude_called.exists()
+    assert (tmp_path / "codex-called").exists()
+
+
+def test_idle_planning_defaults_to_codex_not_claude(tmp_path: Path) -> None:
+    project_dir, env, claude_called = _auto_loop_env(tmp_path, "idle", [])
+
+    result = subprocess.run(
+        [str(project_dir / "scripts" / "auto-loop.sh")],
+        cwd=project_dir,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert not claude_called.exists()
+    assert (tmp_path / "codex-called").exists()
 
 
 def test_idle_prompts_auto_start_without_implementation_approval() -> None:

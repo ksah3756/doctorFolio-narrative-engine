@@ -102,6 +102,8 @@ implementation handoff below in the same invocation. Do not set
    only for independent bounded work when useful. Before exit, apply
    `scripts/learning-policy.md` and call `scripts/record-auto-loop-lesson.sh` only
    when the work produced a reusable, evidence-backed lesson.
+   If the user explicitly requested Claude review, include the exact marker
+   `claude-review-required` in the brief.
 4. Dispatch a direct Codex CLI task:
 
 ```bash
@@ -113,8 +115,9 @@ scripts/dispatch-codex-task.sh \
 
 The dispatcher runs the implementation Codex in a detached tmux session. Its wrapper
 runs `make verify`, then starts a fresh read-only, ephemeral Codex review session.
-Review results are posted to Discord without mentions. P1 findings trigger up to three
-automatic implementation/review cycles.
+Low-risk reviews with P1 zero post mention-free results and arm PR approval. Numeric,
+provider, architectural, P1, uncertain, or explicitly requested reviews mention Claude
+once and enter `awaiting_claude_review`.
 
 5. Update `.auto-loop/work-status.md`:
    `phase: implementing`, `issue: <N>`, `branch: feat/<N>-slug`,
@@ -132,9 +135,9 @@ Implementation Handoff immediately, advance to `phase: implementing`, and stop.
 ## phase: implementing — Owned By The Implementation/Review Wrapper
 
 Do not review code or read Discord in this phase. `scripts/run-codex-task.sh` owns the
-implementation verification, independent Codex review, P1 remediation loop,
-mention-free result delivery, and PR approval gate transition. It persists the
-returned Discord message ID as `pr_approval_message_id` before arming that gate.
+implementation verification, independent Codex review, risk routing, result delivery,
+and PR approval gate transition. Only a low-risk P1-zero result persists the returned Discord message ID
+as `pr_approval_message_id`; escalations wait for Claude.
 
 Inspect only `.auto-loop/tasks/issue-<N>.json`:
 
@@ -142,6 +145,13 @@ Inspect only `.auto-loop/tasks/issue-<N>.json`:
 - `failed`: leave state unchanged and report its JSONL log path to stdout.
 - `completed`: the wrapper should already have moved state to `awaiting_pr`. If state
   still says implementing, report a state mismatch; do not repeat review or delivery.
+- `escalated`: state should already be `awaiting_claude_review`; do not invoke another
+  scheduled LLM or repeat the Discord mention.
+
+## phase: awaiting_claude_review — Owned By Discord-Triggered Claude
+
+Do not review, read Discord, or mutate state from the scheduled Codex runner. The one
+conditional Discord mention owns this phase. Leave state unchanged and stop.
 
 ## phase: awaiting_pr — Owned By The 10-Minute Shell Poller
 

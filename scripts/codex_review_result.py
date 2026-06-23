@@ -18,8 +18,27 @@ class Finding(TypedDict):
 class Review(TypedDict):
     status: str
     summary: str
+    risk_level: str
+    claude_escalation: bool
+    escalation_reasons: list[str]
     p1_findings: list[Finding]
     p2_findings: list[Finding]
+
+
+NUMERIC_CORE_FILES = {
+    "src/dcf_engine/assumption.py",
+    "src/dcf_engine/bridge.py",
+    "src/dcf_engine/distributions.py",
+    "src/dcf_engine/factor.py",
+    "src/dcf_engine/lifecycle.py",
+    "src/dcf_engine/loading.py",
+    "src/dcf_engine/monte_carlo.py",
+    "src/dcf_engine/routing.py",
+}
+PROVIDER_FILES = {
+    "pyproject.toml",
+    "src/dcf_engine/extraction/client.py",
+}
 
 
 def _frontmatter(lines: list[str]) -> tuple[int, dict[str, str]]:
@@ -53,6 +72,9 @@ def update_state(args: argparse.Namespace) -> None:
             raise SystemExit("approved review is missing a Discord message id")
         replacements["phase"] = "awaiting_pr"
         replacements["pr_approval_message_id"] = args.message_id
+    elif args.status == "CLAUDE_REVIEW":
+        replacements["phase"] = "awaiting_claude_review"
+        replacements["pr_approval_message_id"] = "null"
 
     seen: set[str] = set()
     for index in range(1, end):
@@ -76,7 +98,15 @@ def update_state(args: argparse.Namespace) -> None:
 
 def _read_review(path: Path) -> Review:
     payload = json.loads(path.read_text())
-    required = {"status", "summary", "p1_findings", "p2_findings"}
+    required = {
+        "status",
+        "summary",
+        "risk_level",
+        "claude_escalation",
+        "escalation_reasons",
+        "p1_findings",
+        "p2_findings",
+    }
     if not isinstance(payload, dict) or set(payload) != required:
         raise SystemExit("review result has unexpected fields")
     status = payload["status"]
@@ -88,6 +118,9 @@ def _read_review(path: Path) -> Review:
         not isinstance(payload["summary"], str)
         or not isinstance(p1, list)
         or not isinstance(p2, list)
+        or payload["risk_level"] not in {"LOW", "HIGH"}
+        or not isinstance(payload["claude_escalation"], bool)
+        or not isinstance(payload["escalation_reasons"], list)
     ):
         raise SystemExit("invalid review result types")
     if (status == "APPROVED") != (len(p1) == 0):
@@ -97,7 +130,35 @@ def _read_review(path: Path) -> Review:
             raise SystemExit("invalid review finding")
         if not all(isinstance(value, str) and value for value in finding.values()):
             raise SystemExit("review finding values must be non-empty strings")
+    if not all(isinstance(reason, str) and reason for reason in payload["escalation_reasons"]):
+        raise SystemExit("invalid escalation reasons")
+    if payload["risk_level"] == "HIGH" and not payload["claude_escalation"]:
+        raise SystemExit("high-risk review must request Claude escalation")
+    if payload["claude_escalation"] != bool(payload["escalation_reasons"]):
+        raise SystemExit("Claude escalation flag and reasons disagree")
     return cast(Review, payload)
+
+
+def classify_risk(args: argparse.Namespace) -> None:
+    review = _read_review(Path(args.review_json))
+    changed_files = {
+        line.strip() for line in Path(args.changed_files).read_text().splitlines() if line.strip()
+    }
+    reasons = set(review["escalation_reasons"])
+    if review["p1_findings"]:
+        reasons.add("p1_finding")
+    if changed_files & NUMERIC_CORE_FILES:
+        reasons.add("numeric_semantics")
+    if changed_files & PROVIDER_FILES:
+        reasons.add("external_provider")
+    production_files = {path for path in changed_files if path.startswith("src/")}
+    if len(production_files) >= 8:
+        reasons.add("architecture_change")
+    if args.force:
+        reasons.add("explicit_request")
+    if args.cycle >= 2 and review["p1_findings"]:
+        reasons.add("repeated_fix_failure")
+    print(",".join(sorted(reasons)))
 
 
 def _report_findings(items: list[Finding]) -> list[str]:
@@ -142,6 +203,30 @@ def _discord_message(review: Review, issue: str, branch: str, cycle: int) -> str
     return (body + separator + suffix).replace("<@", "@")
 
 
+def write_escalation(args: argparse.Namespace) -> None:
+    review_message = Path(args.review_message).read_text()
+    prefix = [
+        f"<@{args.bot_id}>",
+        f"[auto-loop] #{args.issue} 조건부 Claude 리뷰 요청",
+        f"브랜치: {args.branch}",
+        f"사유: {args.reasons}",
+        "Codex 독립 리뷰 결과:",
+    ]
+    suffix = [
+        "프로젝트 루트에서 scripts/auto-loop-prompt.md의 "
+        "phase: awaiting_claude_review 절차를 실행하세요.",
+    ]
+    fixed = "\n".join([*prefix, *suffix])
+    review_limit = 1900 - len(fixed) - 2
+    if len(review_message) > review_limit:
+        review_message = (
+            review_message[: max(0, review_limit - 45)].rstrip()
+            + "\n(전체 결과: repo의 REVIEW 파일 참조)"
+        )
+    message = "\n".join([*prefix, review_message, *suffix])
+    Path(args.output).write_text(message)
+
+
 def format_review(args: argparse.Namespace) -> None:
     review = _read_review(Path(args.review_json))
     p1 = review["p1_findings"]
@@ -152,6 +237,9 @@ def format_review(args: argparse.Namespace) -> None:
         f"cycle: {args.cycle}",
         f"branch: {args.branch}",
         f"status: {review['status']}",
+        f"risk_level: {review['risk_level']}",
+        f"claude_escalation: {str(review['claude_escalation']).lower()}",
+        f"escalation_reasons: {','.join(review['escalation_reasons']) or 'none'}",
         f"p1_count: {len(p1)}",
         f"p2_count: {len(p2)}",
         "---",
@@ -200,6 +288,18 @@ def _parser() -> argparse.ArgumentParser:
         formatter.add_argument(f"--{name.replace('_', '-')}", required=True)
     formatter.add_argument("--cycle", type=int, required=True)
     formatter.set_defaults(handler=format_review)
+
+    risk = subparsers.add_parser("risk")
+    risk.add_argument("--review-json", required=True)
+    risk.add_argument("--changed-files", required=True)
+    risk.add_argument("--cycle", type=int, required=True)
+    risk.add_argument("--force", action="store_true")
+    risk.set_defaults(handler=classify_risk)
+
+    escalation = subparsers.add_parser("escalation")
+    for name in ("review_message", "output", "issue", "branch", "reasons", "bot_id"):
+        escalation.add_argument(f"--{name.replace('_', '-')}", required=True)
+    escalation.set_defaults(handler=write_escalation)
     return parser
 
 

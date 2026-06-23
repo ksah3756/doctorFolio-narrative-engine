@@ -33,6 +33,7 @@ Before any task is "Done":
 | --------------- | ------ | ---------------------------------------- |
 | **Implementer** | Codex  | TDD → `make verify` → commit             |
 | **Reviewer**    | Codex  | Fresh read-only review → `REVIEW-N.md`   |
+| **Escalation Reviewer** | Claude | High-risk/P1/uncertain changes only |
 | **Git Manager** | Shell  | 승인 폴링 → PR 생성/머지                 |
 
 ### Auto-loop 명령어 (`ㄱㄱ` / `go`)
@@ -110,3 +111,6 @@ Reviewer (독립 Codex 세션) 평가 기준:
 5. **Prioritization**:
    - **P1 (Blocker)**: 누락 테스트, verify 실패, 수치 오류.
    - **P2 (Nitpick)**: 선택 개선.
+
+Claude 리뷰는 수치 의미, 외부 provider, 큰 아키텍처, P1, 반복 수정 실패,
+요구사항 충돌·사용자 선택, 명시적 요청에만 조건부로 호출한다.

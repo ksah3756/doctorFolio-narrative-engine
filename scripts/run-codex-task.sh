@@ -55,7 +55,7 @@ FINAL_MESSAGE="$LOG_DIR/codex-issue-$issue-final.md"
 STATE_FILE="$PROJECT_DIR/.auto-loop/work-status.md"
 REVIEW_SCHEMA="$SCRIPT_DIR/codex-review-schema.json"
 REVIEW_RESULT_TOOL="$SCRIPT_DIR/codex_review_result.py"
-MAX_REVIEW_CYCLES=3
+CLAUDE_BOT_ID="1491798466660139148"
 
 [[ -x "$CODEX_BIN" ]] || die "codex binary not found: ${CODEX_BIN:-unset}"
 command -v git >/dev/null 2>&1 || die "git is required"
@@ -176,7 +176,7 @@ write_review_prompt() {
   local review_prompt="$2"
   cat > "$review_prompt" <<EOF
 You are a fresh, independent Codex code-review agent. Review issue #$issue on branch
-$branch against origin/main. The implementation agent's context is intentionally not
+$branch against $review_base. The implementation agent's context is intentionally not
 available to you.
 
 Inspect the full diff and commit history. Follow AGENTS.md, including TDD ordering,
@@ -187,8 +187,10 @@ create a PR.
 
 Classify only release-blocking correctness defects, missing required tests, failed
 verification implications, or numerical errors as P1. Classify optional improvements
-as P2. Return only JSON matching the provided schema. APPROVED requires zero P1
-findings; otherwise return NEEDS_REVISION. This is review cycle $cycle.
+as P2. Mark risk HIGH and request Claude escalation for DCF/numerical semantics,
+external providers, large architecture changes, requirement conflicts, user choices,
+or material uncertainty. Return only JSON matching the provided schema. APPROVED
+requires zero P1 findings; otherwise return NEEDS_REVISION. This is review cycle $cycle.
 EOF
 }
 
@@ -248,6 +250,58 @@ if not message_id.isdigit():
     raise SystemExit(1)
 print(message_id)
 '
+}
+
+post_claude_escalation() {
+  local message_file="$1"
+  if [[ "${AUTO_LOOP_DISABLE_DISCORD:-0}" == "1" ]]; then
+    return 1
+  fi
+  local webhook_url endpoint payload
+  webhook_url="$(resolve_webhook_url)"
+  [[ -n "$webhook_url" ]] || return 1
+  command -v curl >/dev/null 2>&1 || return 1
+  if [[ "$webhook_url" == *\?* ]]; then
+    endpoint="${webhook_url}&wait=true"
+  else
+    endpoint="${webhook_url}?wait=true"
+  fi
+  payload="$(python3 - "$message_file" "$CLAUDE_BOT_ID" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+print(
+    json.dumps(
+        {
+            "content": Path(sys.argv[1]).read_text(),
+            "allowed_mentions": {"users": [sys.argv[2]]},
+        }
+    )
+)
+PY
+)"
+  curl -sS --fail --max-time 15 -X POST "$endpoint" \
+    -H "Content-Type: application/json" -d "$payload" >/dev/null
+}
+
+classify_review_risk() {
+  local review_json="$1"
+  local changed_files="$2"
+  local cycle="$3"
+  if [[ "${AUTO_LOOP_FORCE_CLAUDE_REVIEW:-0}" == "1" ]] || \
+      grep -qiE 'claude-review-required|claude review required|Claude 리뷰 필수' "$prompt_file"; then
+    python3 "$REVIEW_RESULT_TOOL" risk \
+      --review-json "$review_json" \
+      --changed-files "$changed_files" \
+      --cycle "$cycle" \
+      --force
+    return
+  fi
+  python3 "$REVIEW_RESULT_TOOL" risk \
+    --review-json "$review_json" \
+    --changed-files "$changed_files" \
+    --cycle "$cycle"
 }
 
 run_implementation() {
@@ -323,72 +377,89 @@ fi
 
 review_cycle="$(state_value review_cycle)"
 [[ "$review_cycle" =~ ^[0-9]+$ ]] || review_cycle=0
+if git rev-parse --verify --quiet origin/main >/dev/null 2>&1; then
+  review_base="origin/main"
+else
+  review_base="main"
+fi
+changed_files="$LOG_DIR/codex-review-issue-$issue-changed-files.txt"
+git diff --name-only "$review_base...HEAD" > "$changed_files"
 
-while [[ "$review_cycle" -lt "$MAX_REVIEW_CYCLES" ]]; do
-  review_cycle=$((review_cycle + 1))
-  review_prompt="$TASK_DIR/issue-$issue-review-$review_cycle-prompt.md"
-  review_json="$LOG_DIR/codex-review-issue-$issue-$review_cycle.json"
-  review_report="$PROJECT_DIR/REVIEW-$review_cycle.md"
-  discord_message="$LOG_DIR/codex-review-issue-$issue-$review_cycle-discord.md"
-  fix_prompt="$TASK_DIR/issue-$issue-review-$review_cycle-fix.md"
-  write_review_prompt "$review_cycle" "$review_prompt"
-  write_status "running" 0 "review"
+review_cycle=$((review_cycle + 1))
+review_prompt="$TASK_DIR/issue-$issue-review-$review_cycle-prompt.md"
+review_json="$LOG_DIR/codex-review-issue-$issue-$review_cycle.json"
+review_report="$PROJECT_DIR/REVIEW-$review_cycle.md"
+discord_message="$LOG_DIR/codex-review-issue-$issue-$review_cycle-discord.md"
+fix_prompt="$TASK_DIR/issue-$issue-review-$review_cycle-fix.md"
+write_review_prompt "$review_cycle" "$review_prompt"
+write_status "running" 0 "review"
 
-  "$CODEX_BIN" --ask-for-approval never exec \
-    --cd "$PROJECT_DIR" \
-    --sandbox read-only \
-    --ephemeral \
-    -c 'model_reasoning_effort="high"' \
-    --output-schema "$REVIEW_SCHEMA" \
-    --output-last-message "$review_json" \
-    - < "$review_prompt" >> "$EVENT_LOG" 2>&1
-  review_status=$?
-  if [[ "$review_status" -ne 0 ]]; then
-    write_status "failed" "$review_status" "review"
-    notify_failure
-    exit "$review_status"
-  fi
+"$CODEX_BIN" --ask-for-approval never exec \
+  --cd "$PROJECT_DIR" \
+  --sandbox read-only \
+  --ephemeral \
+  -c 'model_reasoning_effort="high"' \
+  --output-schema "$REVIEW_SCHEMA" \
+  --output-last-message "$review_json" \
+  - < "$review_prompt" >> "$EVENT_LOG" 2>&1
+review_status=$?
+if [[ "$review_status" -ne 0 ]]; then
+  write_status "failed" "$review_status" "review"
+  notify_failure
+  exit "$review_status"
+fi
 
-  p1_count="$(format_review "$review_cycle" "$review_json" "$review_report" "$discord_message" "$fix_prompt")" || {
-    write_status "failed" 1 "review"
-    notify_failure
+p1_count="$(format_review "$review_cycle" "$review_json" "$review_report" "$discord_message" "$fix_prompt")" || {
+  write_status "failed" 1 "review"
+  notify_failure
+  exit 1
+}
+
+escalation_reasons="$(classify_review_risk "$review_json" "$changed_files" "$review_cycle")" || {
+  write_status "failed" 1 "review_risk"
+  exit 1
+}
+if [[ -n "$escalation_reasons" ]]; then
+  escalation_message="$LOG_DIR/codex-review-issue-$issue-$review_cycle-claude.md"
+  python3 "$REVIEW_RESULT_TOOL" escalation \
+    --review-message "$discord_message" \
+    --output "$escalation_message" \
+    --issue "$issue" \
+    --branch "$branch" \
+    --reasons "$escalation_reasons" \
+    --bot-id "$CLAUDE_BOT_ID"
+  post_claude_escalation "$escalation_message" || {
+    write_status "failed" 1 "claude_notify"
     exit 1
   }
-
-  if [[ "$p1_count" -eq 0 ]]; then
-    message_id=""
-    if [[ "${AUTO_LOOP_DISABLE_DISCORD:-0}" != "1" ]]; then
-      message_id="$(post_review "$discord_message")" || {
-        write_status "failed" 1 "review_notify"
-        exit 1
-      }
-    fi
-    if [[ -f "$STATE_FILE" && -n "$message_id" ]]; then
-      update_review_state "$review_cycle" "APPROVED" "$message_id" || {
-        write_status "failed" 1 "review_state"
-        exit 1
-      }
-    fi
-    write_status "completed" 0 "review"
-    echo "[codex-task] issue #$issue implemented and independently reviewed on $branch"
-    exit 0
-  fi
-
-  post_review "$discord_message" >/dev/null || {
-    write_status "failed" 1 "review_notify"
-    exit 1
-  }
-  next_review_status="NEEDS_REVISION"
-  if [[ "$review_cycle" -ge "$MAX_REVIEW_CYCLES" ]]; then
-    next_review_status="ESCALATED"
-  fi
-  update_review_state "$review_cycle" "$next_review_status" || {
+  update_review_state "$review_cycle" "CLAUDE_REVIEW" || {
     write_status "failed" 1 "review_state"
     exit 1
   }
-  if [[ "$review_cycle" -ge "$MAX_REVIEW_CYCLES" ]]; then
-    write_status "failed" 1 "review_escalated"
-    exit 1
+  write_status "escalated" 0 "claude_review"
+  echo "[codex-task] issue #$issue escalated to conditional Claude review"
+  exit 0
+fi
+
+if [[ "$p1_count" -eq 0 ]]; then
+  message_id=""
+  if [[ "${AUTO_LOOP_DISABLE_DISCORD:-0}" != "1" ]]; then
+    message_id="$(post_review "$discord_message")" || {
+      write_status "failed" 1 "review_notify"
+      exit 1
+    }
   fi
-  run_implementation "$fix_prompt" || exit $?
-done
+  if [[ -f "$STATE_FILE" && -n "$message_id" ]]; then
+    update_review_state "$review_cycle" "APPROVED" "$message_id" || {
+      write_status "failed" 1 "review_state"
+      exit 1
+    }
+  fi
+  write_status "completed" 0 "review"
+  echo "[codex-task] issue #$issue implemented and independently reviewed on $branch"
+  exit 0
+fi
+
+write_status "failed" 1 "review_routing"
+echo "[codex-task] P1 review reached low-risk path unexpectedly" >&2
+exit 1

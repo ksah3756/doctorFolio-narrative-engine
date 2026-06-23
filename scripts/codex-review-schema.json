@@ -2,7 +2,15 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "additionalProperties": false,
-  "required": ["status", "summary", "p1_findings", "p2_findings"],
+  "required": [
+    "status",
+    "summary",
+    "risk_level",
+    "claude_escalation",
+    "escalation_reasons",
+    "p1_findings",
+    "p2_findings"
+  ],
   "properties": {
     "status": {
       "type": "string",
@@ -12,6 +20,28 @@
       "type": "string",
       "minLength": 1,
       "maxLength": 500
+    },
+    "risk_level": {
+      "type": "string",
+      "enum": ["LOW", "HIGH"]
+    },
+    "claude_escalation": {"type": "boolean"},
+    "escalation_reasons": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "enum": [
+          "numeric_semantics",
+          "external_provider",
+          "architecture_change",
+          "requirement_conflict",
+          "user_choice_required",
+          "uncertainty",
+          "p1_finding",
+          "explicit_request"
+        ]
+      }
     },
     "p1_findings": {
       "type": "array",

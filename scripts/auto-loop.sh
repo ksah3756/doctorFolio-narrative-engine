@@ -104,11 +104,15 @@ phase="$(current_phase)"
 runner="$AUTO_LOOP_RUNNER"
 
 if [ "$runner" = "auto" ]; then
-  runner="claude"
+  runner="codex"
 fi
 
 if [[ "$phase" == "awaiting_pr" ]]; then
   log "phase awaiting_pr: 10분 PR 승인 poller가 처리, LLM 호출 생략"
+  exit 0
+fi
+if [[ "$phase" == "awaiting_claude_review" ]]; then
+  log "phase awaiting_claude_review: Discord 조건부 Claude 리뷰가 처리, 정각 LLM 호출 생략"
   exit 0
 fi
 
