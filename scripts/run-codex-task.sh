@@ -150,14 +150,19 @@ PY
 
 cd "$PROJECT_DIR" || die "cannot enter project: $PROJECT_DIR"
 
+git fetch origin --quiet 2>/dev/null || true
 current_branch="$(git branch --show-current)"
 if [[ "$current_branch" != "$branch" ]]; then
   if git show-ref --verify --quiet "refs/heads/$branch"; then
     git switch "$branch" || die "cannot switch to existing branch: $branch"
   else
-    git switch -c "$branch" || die "cannot create branch: $branch"
+    # 신규 작업 브랜치는 항상 최신 origin/main에서 분기한다 (stale HEAD 분기로 인한 충돌 방지).
+    git switch -c "$branch" origin/main || die "cannot create branch from origin/main: $branch"
   fi
 fi
+
+# 커밋 가드용 기준 커밋 (Codex 실행 전 HEAD).
+head_before="$(git rev-parse HEAD)"
 
 write_status "running" 0 "codex"
 : > "$EVENT_LOG"
@@ -183,6 +188,16 @@ if [[ "$verify_status" -ne 0 ]]; then
   write_status "failed" "$verify_status" "verify"
   notify_discord "failed"
   exit "$verify_status"
+fi
+
+# 커밋 가드: Codex는 작업을 반드시 커밋해야 한다. verify는 통과시키되 staged-only로
+# 남기고 완료 보고하는 경우(미커밋)를 차단한다 — 완료 = 새 커밋 존재 + index clean.
+head_after="$(git rev-parse HEAD)"
+if [[ "$head_after" == "$head_before" ]] || ! git diff --cached --quiet; then
+  write_status "failed" 1 "commit"
+  notify_discord "failed"
+  echo "[codex-task] issue #$issue: 미커밋 변경 감지 — 완료 차단 (HEAD 미전진 또는 staged 잔존)" >&2
+  exit 1
 fi
 
 write_status "completed" 0 "verify"

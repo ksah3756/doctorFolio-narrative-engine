@@ -112,7 +112,10 @@ Branch:
 2. Choose branch `feat/<N>-slug`.
 3. Write the approved implementation brief to `.auto-loop/tasks/issue-<N>-prompt.md`.
    Require strict TDD, `make verify`, separate test/implementation commits, the
-   Lore commit protocol, and no PR creation. Native Codex subagents may be used
+   Lore commit protocol, and no PR creation. **The brief MUST state explicitly that
+   Codex commits its work on the branch before finishing — leaving changes staged or
+   uncommitted fails the task (run-codex-task.sh blocks completion on a dirty index /
+   un-advanced HEAD).** Native Codex subagents may be used
    only for independent bounded work when useful. Before exit, apply
    `scripts/learning-policy.md` and call `scripts/record-auto-loop-lesson.sh` only
    when the work produced a reusable, evidence-backed lesson.

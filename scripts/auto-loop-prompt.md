@@ -73,6 +73,8 @@
 3. `.auto-loop/tasks/issue-<N>-prompt.md`에 승인된 계획과 아래 구현 지시를 보존한다:
    - 현재 브랜치 `feat/<N>-slug`에서 직접 구현한다.
    - strict TDD(Red-Green-Refactor), `make verify`, 테스트/구현 분리 커밋, Lore commit protocol을 따른다.
+   - **종료 전 반드시 브랜치에 커밋한다.** staged-only/미커밋 상태로 끝내면 task 실패다
+     (run-codex-task.sh가 HEAD 미전진·index 미정리를 완료 차단). 이 지시를 brief에 명시한다.
    - 필요할 때만 Codex native subagent를 독립적인 테스트·탐색 작업에 사용한다.
    - 종료 전에 `scripts/learning-policy.md` 기준을 적용하고, 기록 가치가 있을 때만
      `scripts/record-auto-loop-lesson.sh`를 호출한다.

@@ -27,7 +27,7 @@ Before any task is "Done":
 2. **Green:** 통과시키는 최소 코드.
 3. **Refactor:** 테스트 유지하며 정리.
 4. **Commit:** 테스트와 구현은 TDD 사이클 반영하여 분리 커밋.
-5. **Verify:** `make verify` 통과 후 `git status` clean 확인.
+5. **Verify:** `make verify` 통과 후 `git status` clean 확인. **작업은 반드시 커밋까지 끝낸다** — staged-only/미커밋으로 완료 보고 금지. (auto-loop dispatch는 `run-codex-task.sh`가 미커밋이면 completed를 차단한다.)
 
 | Role            | Owner  | Action                                   |
 | --------------- | ------ | ---------------------------------------- |
