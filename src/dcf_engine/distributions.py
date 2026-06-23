@@ -4,11 +4,22 @@ from __future__ import annotations
 
 import math
 from collections.abc import Sequence
-from typing import Final, Literal, assert_never
+from statistics import NormalDist
+from typing import Final, Literal, Protocol, assert_never
 
 from numpy.random import Generator
 
 MIN_BETA_CONCENTRATION: Final = 0.1
+LOW_SCALE_QUANTILE: Final = 0.10
+HIGH_SCALE_QUANTILE: Final = 0.90
+
+
+class ScaleSpecLike(Protocol):
+    @property
+    def center(self) -> float: ...
+
+    @property
+    def uncertainty(self) -> float: ...
 
 type DistributionFamily = Literal[
     "beta",
@@ -50,6 +61,36 @@ def lognormal_scale_from_median(median: float, std_in_orig_space: float) -> tupl
     _require_finite_positive("std_in_orig_space", std_in_orig_space)
     sigma_ln = math.sqrt(math.log(1 + (std_in_orig_space / median) ** 2))
     return math.log(median), sigma_ln
+
+
+def lognormal_scale_from_three_points(
+    low: float, base: float, high: float
+) -> tuple[float, float]:
+    _require_finite_positive("low", low)
+    _require_finite_positive("base", base)
+    _require_finite_positive("high", high)
+    if not low < base < high:
+        raise ValueError("scale points must satisfy low < base < high")
+    normal = NormalDist()
+    quantile_width = normal.inv_cdf(HIGH_SCALE_QUANTILE) - normal.inv_cdf(
+        LOW_SCALE_QUANTILE
+    )
+    # low/high의 log-space 폭으로 scale을 복원하고 base는 median으로 고정한다.
+    sigma_ln = (math.log(high) - math.log(low)) / quantile_width
+    return math.log(base), sigma_ln
+
+
+def sample_scale(scale_spec: ScaleSpecLike, rng: Generator) -> float:
+    _require_finite_positive("scale center", scale_spec.center)
+    _require_finite("scale uncertainty", scale_spec.uncertainty)
+    if scale_spec.uncertainty < 0:
+        raise ValueError("scale uncertainty must not be negative")
+    if scale_spec.uncertainty == 0:
+        return scale_spec.center
+    mu_ln, sigma_ln = lognormal_scale_from_median(
+        scale_spec.center, scale_spec.uncertainty
+    )
+    return float(rng.lognormal(mu_ln, sigma_ln))
 
 
 def triangular_from_mu(mu: float, low: float, high: float) -> tuple[float, float, float]:
