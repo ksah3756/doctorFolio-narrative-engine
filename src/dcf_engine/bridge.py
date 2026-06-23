@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from math import isfinite
-from typing import Final, Literal, cast
+from typing import Final, Literal, cast, overload
+
+import numpy as np
+from numpy.typing import NDArray
 
 from dcf_engine.claim import (
     CapitalStructureInstrument,
@@ -147,13 +150,60 @@ def equity_value(inputs: BridgeInputs) -> float:
     return value
 
 
+def equity_value_samples(
+    base: BridgeInputs,
+    default_probability_samples: NDArray[np.float64],
+) -> NDArray[np.float64]:
+    probabilities = np.asarray(default_probability_samples, dtype=np.float64)
+    if not np.all(np.isfinite(probabilities)) or np.any(
+        (probabilities < MIN_DEFAULT_PROBABILITY)
+        | (probabilities > MAX_DEFAULT_PROBABILITY)
+    ):
+        raise ValueError(
+            "default_probability_samples must be finite and between 0 and 1"
+        )
+
+    distress_adjusted = _distress_adjusted_firm_value(
+        base.going_concern_firm_value,
+        base.liquidation_firm_value,
+        probabilities,
+    )
+    values = (
+        distress_adjusted
+        - base.interest_bearing_debt
+        - base.lease_liability
+        - base.minority_interest
+        + base.cash_and_non_operating_assets
+        - base.option_value
+    )
+    if not np.all(np.isfinite(values)):
+        raise ValueError("equity_value_samples must be finite")
+    return values
+
+
+@overload
 def _distress_adjusted_firm_value(
     going_concern_firm_value: float,
     liquidation_firm_value: float,
     default_probability: float,
-) -> float:
+) -> float: ...
+
+
+@overload
+def _distress_adjusted_firm_value(
+    going_concern_firm_value: float,
+    liquidation_firm_value: float,
+    default_probability: NDArray[np.float64],
+) -> NDArray[np.float64]: ...
+
+
+def _distress_adjusted_firm_value(
+    going_concern_firm_value: float,
+    liquidation_firm_value: float,
+    default_probability: float | NDArray[np.float64],
+) -> float | NDArray[np.float64]:
     # 부도확률 가중은 scalar와 후속 vector 경로가 공유할 단일 계산 경계다.
     return (
-        (1 - default_probability) * going_concern_firm_value
+        (MAX_DEFAULT_PROBABILITY - default_probability) * going_concern_firm_value
         + default_probability * liquidation_firm_value
     )
