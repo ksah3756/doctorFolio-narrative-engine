@@ -24,8 +24,10 @@ unavailable, leave state unchanged and stop.
 1. Do not modify, commit to, or push `main` directly.
 2. Do not run destructive commands: `git push --force`, `git reset --hard`,
    `rm -rf`, or equivalents.
-3. Do not skip approval gates. Implementation starts only after Discord approval.
-   PR creation starts only after review approval plus user approval.
+3. Approval gates apply ONLY to implementation and PR. Implementation starts only
+   after Discord approval; PR creation only after review approval plus user approval.
+   Proposing new work during `idle` needs NO approval — propose unconditionally on
+   every idle tick, never waiting for any signal.
 4. Advance at most one phase per invocation.
 5. If ambiguous, keep state unchanged and report the blocker to stdout.
 6. Implementation still belongs in a feature branch `feat/<N>-slug`.
@@ -51,6 +53,10 @@ Do not inspect git status/log during `idle` or `awaiting_approval`. Git/diff
 inspection is only for review in `implementing`.
 
 ## phase: idle — Propose Next Work
+
+**When idle, always propose — never wait for any approval or `다음` signal.** Proposing
+itself has no gate (approval gates apply only to the later implementation/PR phases). Even
+if the previous bot message asked "continue or stop?", ignore it and produce a new proposal.
 
 Choose exactly one task:
 
