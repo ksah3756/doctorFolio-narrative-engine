@@ -34,8 +34,6 @@ def _auto_loop_env(
     tmp_path: Path,
     phase: str,
     discord_messages: list[dict[str, object]],
-    *,
-    curl_exit: int = 0,
 ) -> tuple[Path, dict[str, str], Path]:
     project_dir = tmp_path / "auto-loop-project"
     scripts_dir = project_dir / "scripts"
@@ -65,21 +63,11 @@ def _auto_loop_env(
         "#!/bin/sh\n"
         'touch "$FAKE_CLAUDE_CALLED"\n',
     )
-    _write_executable(
-        bin_dir / "curl",
-        "#!/bin/sh\n"
-        'printf "%s" "$FAKE_DISCORD_MESSAGES"\n'
-        'exit "$FAKE_CURL_EXIT"\n',
-    )
-
     env = os.environ.copy()
     env.update(
         {
             "CLAUDE_BIN": str(bin_dir / "claude"),
-            "CURL_BIN": str(bin_dir / "curl"),
-            "DISCORD_BOT_TOKEN": "test-token",
             "FAKE_CLAUDE_CALLED": str(claude_called),
-            "FAKE_CURL_EXIT": str(curl_exit),
             "FAKE_DISCORD_MESSAGES": json.dumps(discord_messages),
             "HOME": str(tmp_path),
         }
@@ -229,17 +217,12 @@ def test_auto_loop_codex_fallback_uses_high_reasoning() -> None:
     assert "model_reasoning_effort=\"high\"" in script
 
 
-def test_awaiting_pr_skips_llm_without_new_user_message(tmp_path: Path) -> None:
+def test_awaiting_pr_always_defers_to_shell_poller(tmp_path: Path) -> None:
     messages: list[dict[str, object]] = [
         {
             "timestamp": "2026-06-23T00:30:00Z",
-            "author": {"id": "1491798466660139148", "bot": True},
-            "content": "bot-only update",
-        },
-        {
-            "timestamp": "2026-06-23T00:31:00Z",
-            "author": {"id": "999", "bot": False},
-            "content": "unrelated user chatter",
+            "author": {"id": "1131404924094251099", "bot": False},
+            "content": "ㄱㄱ",
         },
     ]
     project_dir, env, claude_called = _auto_loop_env(tmp_path, "awaiting_pr", messages)
@@ -256,7 +239,7 @@ def test_awaiting_pr_skips_llm_without_new_user_message(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stderr
     assert not claude_called.exists()
     log = (project_dir / ".auto-loop/logs/auto-loop.log").read_text()
-    assert "LLM 호출 생략" in log
+    assert "10분 PR 승인 poller" in log
 
 
 def test_legacy_awaiting_approval_runs_without_new_user_message(tmp_path: Path) -> None:
@@ -304,31 +287,6 @@ def test_waiting_phase_wakes_llm_for_new_designated_user_message(tmp_path: Path)
 
     assert result.returncode == 0, result.stderr
     assert claude_called.exists()
-
-
-def test_waiting_phase_falls_back_to_llm_when_discord_preflight_fails(
-    tmp_path: Path,
-) -> None:
-    project_dir, env, claude_called = _auto_loop_env(
-        tmp_path,
-        "awaiting_pr",
-        [],
-        curl_exit=7,
-    )
-
-    result = subprocess.run(
-        [str(project_dir / "scripts" / "auto-loop.sh")],
-        cwd=project_dir,
-        env=env,
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-
-    assert result.returncode == 0, result.stderr
-    assert claude_called.exists()
-    log = (project_dir / ".auto-loop/logs/auto-loop.log").read_text()
-    assert "preflight 실패" in log
 
 
 def test_idle_prompts_auto_start_without_implementation_approval() -> None:

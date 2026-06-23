@@ -61,6 +61,7 @@ def _poller_env(
     messages: list[dict[str, object]],
     *,
     anchor: str = "200",
+    pr_list: list[dict[str, object]] | None = None,
 ) -> tuple[Path, dict[str, str], Path]:
     project_dir = tmp_path / "project"
     state_dir = project_dir / ".auto-loop"
@@ -70,6 +71,7 @@ def _poller_env(
     (state_dir / "work-status.md").write_text(_state_text(anchor=anchor))
 
     command_log = tmp_path / "commands.log"
+    command_log.write_text("")
     _write_executable(
         bin_dir / "curl",
         "#!/bin/sh\n"
@@ -93,9 +95,11 @@ def _poller_env(
         "#!/bin/sh\n"
         'printf "gh %s\\n" "$*" >> "$FAKE_COMMAND_LOG"\n'
         'case "$1 $2" in\n'
-        '  "pr list") printf \'[]\\n\' ;;\n'
-        '  "pr create") printf \'https://github.com/ksah3756/doctorFolio-narrative-engine/pull/23\\n\' ;;\n'
-        '  "pr view") printf \'{"state":"MERGED","number":23,"url":"https://github.com/ksah3756/doctorFolio-narrative-engine/pull/23"}\\n\' ;;\n'
+        '  "pr list") printf "%s\\n" "$FAKE_PR_LIST" ;;\n'
+        '  "pr create") printf \'https://github.com/ksah3756/'
+        "doctorFolio-narrative-engine/pull/23\\n' ;;\n"
+        '  "pr view") printf \'{"state":"MERGED","number":23,"url":'
+        '"https://github.com/ksah3756/doctorFolio-narrative-engine/pull/23"}\\n\' ;;\n'
         "esac\n",
     )
 
@@ -109,6 +113,7 @@ def _poller_env(
             "DISCORD_BOT_TOKEN": "test-token",
             "FAKE_COMMAND_LOG": str(command_log),
             "FAKE_DISCORD_MESSAGES": json.dumps(messages),
+            "FAKE_PR_LIST": json.dumps(pr_list or []),
         }
     )
     return project_dir, env, command_log
@@ -185,6 +190,30 @@ def test_poller_fails_closed_without_review_message_anchor(tmp_path: Path) -> No
     assert "curl " not in commands
     assert "gh " not in commands
     assert "phase: awaiting_pr" in (project_dir / ".auto-loop/work-status.md").read_text()
+
+
+def test_poller_recovers_state_when_pr_was_already_merged(tmp_path: Path) -> None:
+    messages = [_message("201", "go")]
+    project_dir, env, command_log = _poller_env(
+        tmp_path,
+        messages,
+        pr_list=[
+            {
+                "number": 23,
+                "state": "MERGED",
+                "url": "https://github.com/ksah3756/doctorFolio-narrative-engine/pull/23",
+                "isDraft": False,
+            }
+        ],
+    )
+
+    result = _run_poller(project_dir, env)
+
+    assert result.returncode == 0, result.stderr
+    commands = command_log.read_text()
+    assert "gh pr create" not in commands
+    assert "gh pr merge" not in commands
+    assert "phase: idle" in (project_dir / ".auto-loop/work-status.md").read_text()
 
 
 def test_review_prompts_persist_the_review_message_id_gate() -> None:
