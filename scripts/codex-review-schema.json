@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["status", "summary", "p1_findings", "p2_findings"],
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": ["APPROVED", "NEEDS_REVISION"]
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500
+    },
+    "p1_findings": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/finding"}
+    },
+    "p2_findings": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/finding"}
+    }
+  },
+  "$defs": {
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["location", "issue", "fix"],
+      "properties": {
+        "location": {"type": "string", "minLength": 1, "maxLength": 200},
+        "issue": {"type": "string", "minLength": 1, "maxLength": 500},
+        "fix": {"type": "string", "minLength": 1, "maxLength": 500}
+      }
+    }
+  }
+}

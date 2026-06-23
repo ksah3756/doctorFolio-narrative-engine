@@ -22,7 +22,8 @@
 4. Discord 전송은 `mcp__discord__reply`(channel=위 chat_id)로만. 읽기는 `mcp__discord__fetch_messages`. 사람이 읽는 건 이 메시지뿐이다. (도구는 `--mcp-config`로 주입됨)
 5. 한 발화에서 phase는 **최대 한 칸** 전진한다(`idle→implementing`은 한 번의 전이). 애매하면 멈추고 상태 유지.
 6. 토큰/도구 에러로 작업 못 하면, 상태 변경 없이 조용히 종료(다음 발화가 재시도).
-7. 코드 구현 자체는 **Codex에 위임**한다. 너(Claude)는 계획·리뷰·PR만 담당한다.
+7. 코드 구현과 리뷰는 각각 분리된 **Codex 세션**이 담당한다. 너(Claude)는 계획만 담당하며,
+   PR 승인 감지·생성·머지는 shell poller가 담당한다.
 
 ---
 
@@ -77,9 +78,9 @@
      --branch feat/<N>-slug \
      --prompt-file .auto-loop/tasks/issue-<N>-prompt.md
    ```
-   이 dispatcher는 별도 tmux에서 `codex exec`, workspace-write sandbox, approval=never,
-   `model_reasoning_effort="high"`로 실행한다. 완료 후 래퍼가 `make verify`, task JSON 갱신,
-   Discord 알림을 담당한다.
+   이 dispatcher는 별도 tmux에서 구현 Codex를 실행한다. 완료 후 래퍼가 `make verify`를
+   실행하고 새 read-only·ephemeral Codex 세션에 리뷰를 맡긴다. 리뷰 결과는 멘션 없이
+   Discord에 게시되며, P1은 최대 3회 자동 재작업·재리뷰한다.
 5. 상태파일: `phase: implementing`, `issue: <N>`, `branch: feat/<N>-slug`, `delegated_at: <지금>`, `review_cycle: 0`, `pr_approval_message_id: null`.
 6. Discord에 "🚀 #<N> Codex 구현 착수" 전송 후 종료.
 
@@ -92,54 +93,16 @@
 
 ---
 
-## phase: implementing  — Codex 완료 감지 → 리뷰 (review-handoff 인라인)
-1. `mcp__discord__fetch_messages`(channel)로 `delegated_at` 이후에서 Codex 완료 신호(`Branch: feat/<N>-...`)를 찾는다.
-2. Discord 완료 신호가 없으면 `.auto-loop/tasks/issue-<N>.json`을 읽는다.
-   `status: completed`, `exit_code: 0`, `branch: feat/<N>-slug`이면 **완료 신호로 인정**한다.
-   `status: failed`이면 구현 실패로 보고 상태를 전진시키지 않는다. 로그는
-   `.auto-loop/logs/codex-issue-<N>.jsonl`에 있다.
-3. **둘 다 없으면** → Codex 작업 중. 상태 변경 없이 종료.
-4. **있으면** → 리뷰 수행:
-   - 브랜치 체크아웃/diff 분석 + `make verify` 실행 (여기서만 git/diff 읽기 허용).
-   - 평가 기준(narrative-engine AGENTS.md §5): TDD 시간순(Red 커밋이 Green보다 앞), Tidy First(구조/동작 분리), pydantic validation, **수치 정확성(분포 모수 역산 invariant, NaN/inf 방지)**.
-   - repo 루트에 `REVIEW-<review_cycle+1>.md` 작성:
-     ```
-     ---
-     cycle: <n>
-     branch: feat/<N>-slug
-     status: NEEDS_REVISION   # NEEDS_REVISION | APPROVED | ESCALATED
-     p1_count: <k>
-     p2_count: <m>
-     ---
-     ## P1 (must fix)
-     - [ ] ...
-     ## P2 (optional)
-     - [ ] ...
-     ## Implementer Response
-     <!-- Codex가 채움 -->
-     ## Verdict: REVISE | APPROVE
-     ```
-   - `review_cycle` += 1, 상태파일 갱신.
-   - **P1 > 0** → `.auto-loop/tasks/issue-<N>-review-<n>.md`에 P1 수정 지시를 작성하고 Codex에 직접 재위임:
-     ```bash
-     scripts/dispatch-codex-task.sh \
-       --issue <N> \
-       --branch feat/<N>-slug \
-       --prompt-file .auto-loop/tasks/issue-<N>-review-<n>.md
-     ```
-     `phase: implementing` 유지, Discord에 "🔁 리뷰 <n>: P1 <k>건 → Codex 재작업" 전송, 종료.
-   - **P1 = 0 (APPROVED)** → 아래 메시지를 `mcp__discord__reply`로 먼저 전송한다:
-     ```
-     <@1131404924094251099>
-     ✅ [auto-loop] #<N> 리뷰 통과 (P1 0건)
-     브랜치: feat/<N>-slug
-     → PR 생성+머지를 승인하려면 이 메시지 이후 `ㄱㄱ` 또는 `go`만 보내세요.
-     ```
-     reply 도구가 반환한 Discord 메시지 ID를 반드시 추출한다. 반환된 Discord 메시지 ID가
-     없거나 숫자가 아니면 `phase: implementing`을 유지하고 승인 gate를 열지 않는다.
-     ID를 확보한 경우에만 `phase: awaiting_pr`, `review_cycle` 증가,
-     `pr_approval_message_id: <반환된 Discord 메시지 ID>`로 원자적으로 갱신하고 종료한다.
-   - **3 사이클 후에도 P1 잔존** → `status: ESCALATED`, Discord로 유저 에스컬레이션, phase 유지, 종료.
+## phase: implementing  — 구현·독립 리뷰 래퍼 소유
+이 phase에서 직접 리뷰하거나 Discord 완료 신호를 조회하지 않는다.
+`scripts/run-codex-task.sh`가 구현 검증, 별도 Codex 리뷰, P1 재작업, 멘션 없는 결과 게시,
+승인 gate 설정까지 한 흐름으로 처리한다.
+
+`.auto-loop/tasks/issue-<N>.json`만 확인한다.
+- `running`: 작업 중이므로 상태 변경 없이 종료.
+- `failed`: 상태를 전진시키지 않고 로그 경로만 stdout에 기록.
+- `completed`: 정상적으로는 이미 `phase: awaiting_pr`이어야 한다. 아직 implementing이면
+  상태 불일치로 보고 직접 리뷰하거나 Discord 메시지를 다시 보내지 않는다.
 
 ---
 

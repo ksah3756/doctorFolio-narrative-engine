@@ -111,9 +111,10 @@ scripts/dispatch-codex-task.sh \
   --prompt-file .auto-loop/tasks/issue-<N>-prompt.md
 ```
 
-The dispatcher runs `codex exec` in a detached tmux session with workspace-write,
-approval=never, and `model_reasoning_effort="high"`. Its wrapper runs `make verify`,
-updates `.auto-loop/tasks/issue-<N>.json`, and sends the completion notification.
+The dispatcher runs the implementation Codex in a detached tmux session. Its wrapper
+runs `make verify`, then starts a fresh read-only, ephemeral Codex review session.
+Review results are posted to Discord without mentions. P1 findings trigger up to three
+automatic implementation/review cycles.
 
 5. Update `.auto-loop/work-status.md`:
    `phase: implementing`, `issue: <N>`, `branch: feat/<N>-slug`,
@@ -128,79 +129,18 @@ This phase only exists for state files left by the former approval gate. Do not 
 Discord approval messages. Use the stored Proposed Plan, perform the Automatic
 Implementation Handoff immediately, advance to `phase: implementing`, and stop.
 
-## phase: implementing — Detect Completion And Review
+## phase: implementing — Owned By The Implementation/Review Wrapper
 
-Fetch Discord messages after `delegated_at`. Look for Codex completion signal:
-`Branch: feat/<N>-...`.
+Do not review code or read Discord in this phase. `scripts/run-codex-task.sh` owns the
+implementation verification, independent Codex review, P1 remediation loop,
+mention-free result delivery, and PR approval gate transition.
 
-If no Discord signal exists, inspect `.auto-loop/tasks/issue-<N>.json`. Treat
-`status: completed`, `exit_code: 0`, and the configured branch as the completion
-signal. If `status: failed`, leave the phase unchanged and report the log path
-`.auto-loop/logs/codex-issue-<N>.jsonl`.
+Inspect only `.auto-loop/tasks/issue-<N>.json`:
 
-If neither Discord nor direct task state has a completion signal, leave state
-unchanged and stop.
-
-If a signal exists:
-
-1. Checkout the branch if needed.
-2. Review diff and commit history against `AGENTS.md`.
-3. Run `make verify`.
-4. Write `REVIEW-<review_cycle+1>.md` at repo root:
-
-```text
----
-cycle: <n>
-branch: feat/<N>-slug
-status: NEEDS_REVISION   # NEEDS_REVISION | APPROVED | ESCALATED
-p1_count: <k>
-p2_count: <m>
----
-## P1 (must fix)
-- [ ] ...
-## P2 (optional)
-- [ ] ...
-## Implementer Response
-<!-- Codex implementer fills this -->
-## Verdict: REVISE | APPROVE
-```
-
-If P1 findings exist:
-
-- increment `review_cycle`
-- keep `phase: implementing`
-- write the P1 fix brief to `.auto-loop/tasks/issue-<N>-review-<n>.md` and dispatch it directly:
-
-```bash
-scripts/dispatch-codex-task.sh \
-  --issue <N> \
-  --branch feat/<N>-slug \
-  --prompt-file .auto-loop/tasks/issue-<N>-review-<n>.md
-```
-
-- send Discord: `[Codex] 🔁 리뷰 <n>: P1 <k>건 → Codex 재작업`
-- stop.
-
-If P1 count is zero:
-
-- send Discord first:
-
-```text
-<@1131404924094251099>
-[Codex] ✅ [auto-loop] #<N> 리뷰 통과 (P1 0건)
-브랜치: feat/<N>-slug
-→ PR 생성+머지를 승인하려면 이 메시지 이후 `ㄱㄱ` 또는 `go`만 보내세요.
-```
-
-- Extract the returned Discord message ID from the reply tool result. If there is no
-  numeric returned Discord message ID, keep `phase: implementing` and do not arm the
-  approval gate.
-- Only after obtaining the ID, atomically set `phase: awaiting_pr`, increment/update
-  `review_cycle`, and set `pr_approval_message_id: <returned Discord message ID>`.
-- stop.
-
-If P1 findings remain after 3 review cycles, mark the review status as
-`ESCALATED`, notify Discord, keep `phase: implementing`, and stop.
+- `running`: leave state unchanged and stop.
+- `failed`: leave state unchanged and report its JSONL log path to stdout.
+- `completed`: the wrapper should already have moved state to `awaiting_pr`. If state
+  still says implementing, report a state mismatch; do not repeat review or delivery.
 
 ## phase: awaiting_pr — Owned By The 10-Minute Shell Poller
 
