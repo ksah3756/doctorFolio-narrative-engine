@@ -40,6 +40,11 @@ def _runner_env(tmp_path: Path, project_dir: Path) -> tuple[dict[str, str], Path
         "#!/bin/sh\n"
         'printf "%s\\n" "$@" > "$FAKE_CODEX_ARGS"\n'
         'cat > "$FAKE_CODEX_PROMPT"\n'
+        "# 새 contract: Codex는 작업을 커밋한다 (runner 커밋 가드 충족).\n"
+        'if [ "${FAKE_CODEX_EXIT:-0}" = "0" ]; then\n'
+        "  echo work > codex_work.txt\n"
+        '  git add codex_work.txt && git commit -q -m "stub codex work"\n'
+        "fi\n"
         'exit "${FAKE_CODEX_EXIT:-0}"\n',
     )
     _write_executable(
