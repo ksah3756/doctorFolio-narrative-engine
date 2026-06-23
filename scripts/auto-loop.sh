@@ -185,13 +185,8 @@ if [ "$runner" = "auto" ]; then
   runner="claude"
 fi
 
-if [[ "$phase" == "awaiting_approval" || "$phase" == "awaiting_pr" ]]; then
-  if [[ "$phase" == "awaiting_approval" ]]; then
-    waiting_since="$(state_value "proposed_at")"
-  else
-    waiting_since="$(state_value "updated")"
-  fi
-
+if [[ "$phase" == "awaiting_pr" ]]; then
+  waiting_since="$(state_value "updated")"
   has_new_discord_user_message "$waiting_since"
   preflight_status=$?
   if [[ "$preflight_status" -eq 1 ]]; then
