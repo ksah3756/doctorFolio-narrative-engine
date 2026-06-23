@@ -80,7 +80,7 @@
    이 dispatcher는 별도 tmux에서 `codex exec`, workspace-write sandbox, approval=never,
    `model_reasoning_effort="high"`로 실행한다. 완료 후 래퍼가 `make verify`, task JSON 갱신,
    Discord 알림을 담당한다.
-5. 상태파일: `phase: implementing`, `issue: <N>`, `branch: feat/<N>-slug`, `delegated_at: <지금>`, `review_cycle: 0`.
+5. 상태파일: `phase: implementing`, `issue: <N>`, `branch: feat/<N>-slug`, `delegated_at: <지금>`, `review_cycle: 0`, `pr_approval_message_id: null`.
 6. Discord에 "🚀 #<N> Codex 구현 착수" 전송 후 종료.
 
 ---
@@ -128,24 +128,26 @@
        --prompt-file .auto-loop/tasks/issue-<N>-review-<n>.md
      ```
      `phase: implementing` 유지, Discord에 "🔁 리뷰 <n>: P1 <k>건 → Codex 재작업" 전송, 종료.
-   - **P1 = 0 (APPROVED)** → `phase: awaiting_pr`, Discord 전송 후 종료:
+   - **P1 = 0 (APPROVED)** → 아래 메시지를 `mcp__discord__reply`로 먼저 전송한다:
      ```
      <@1131404924094251099>
      ✅ [auto-loop] #<N> 리뷰 통과 (P1 0건)
      브랜치: feat/<N>-slug
-     → PR 올리려면 `ㄱㄱ` 또는 `go`.
+     → PR 생성+머지를 승인하려면 이 메시지 이후 `ㄱㄱ` 또는 `go`만 보내세요.
      ```
+     reply 도구가 반환한 Discord 메시지 ID를 반드시 추출한다. 반환된 Discord 메시지 ID가
+     없거나 숫자가 아니면 `phase: implementing`을 유지하고 승인 gate를 열지 않는다.
+     ID를 확보한 경우에만 `phase: awaiting_pr`, `review_cycle` 증가,
+     `pr_approval_message_id: <반환된 Discord 메시지 ID>`로 원자적으로 갱신하고 종료한다.
    - **3 사이클 후에도 P1 잔존** → `status: ESCALATED`, Discord로 유저 에스컬레이션, phase 유지, 종료.
 
 ---
 
-## phase: awaiting_pr  — PR 승인 → PR 생성
-1. `mcp__discord__fetch_messages`로 리뷰통과 알림 이후 유저 메시지 확인.
-2. 분기:
-   - **승인(`ㄱㄱ`/`go`)** → `gh pr create -R ksah3756/doctorFolio-narrative-engine --base main`로 PR 생성, 링크 Discord 전송.
-     상태파일: Done에 `#<N> (PR #..)` 추가, `phase: idle` 리셋(issue/branch/proposed_at/delegated_at null, review_cycle 0). 종료.
-   - **반려/피드백** → 내용 반영 위해 Codex 재위임하거나 Discord로 확인 질문, 처리 후 종료.
-   - **무응답** → 상태 변경 없이 종료.
+## phase: awaiting_pr  — 10분 shell poller 소유
+이 phase에서는 Discord를 읽거나 PR을 생성하거나 LLM 판단을 수행하지 않는다.
+`scripts/pr-approval-poller.sh`가 `pr_approval_message_id` 이후의 지정 사용자 메시지만
+10분마다 확인한다. 정확히 `ㄱㄱ`/`go`인 경우에만 PR 생성+머지+idle 초기화를 수행한다.
+이 발화는 상태 변경 없이 즉시 종료한다.
 
 ---
 
