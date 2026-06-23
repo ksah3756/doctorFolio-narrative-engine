@@ -125,7 +125,16 @@ def test_mature_claims_reach_reproducible_reinvestment_samples() -> None:
         * first.revenue_growth_samples
         / first.roic_samples,
     )
-    np.testing.assert_array_equal(first.reinvestment_samples, second.reinvestment_samples)
+    # 결정성: 고정 seed면 reinvestment뿐 아니라 모든 sample 배열이 정확히 동일해야 한다.
+    second_arrays = (
+        second.revenue_growth_samples,
+        second.operating_margin_samples,
+        second.roic_samples,
+        second.wacc_samples,
+        second.reinvestment_samples,
+    )
+    for first_samples, second_samples in zip(sample_arrays, second_arrays, strict=True):
+        np.testing.assert_array_equal(first_samples, second_samples)
 
 
 def _history() -> MatureHistory:
