@@ -695,7 +695,7 @@ def test_hung_codex_tick_times_out_and_releases_lock_for_retry(tmp_path: Path) -
     assert timeout_bin is not None
     env.update(
         {
-            "AUTO_LOOP_AGENT_TIMEOUT_SECONDS": "0.1",
+            "AUTO_LOOP_AGENT_TIMEOUT_SECONDS": "0.5",
             "AUTO_LOOP_AGENT_KILL_AFTER_SECONDS": "0.1",
             "FAKE_CODEX_SLEEP_SECONDS": "2",
             "TIMEOUT_BIN": timeout_bin,
@@ -718,7 +718,7 @@ def test_hung_codex_tick_times_out_and_releases_lock_for_retry(tmp_path: Path) -
     assert elapsed < 1.5
     assert not (project_dir / ".auto-loop/auto-loop.lock").exists()
     log_path = project_dir / ".auto-loop/logs/auto-loop.log"
-    assert "agent timeout: codex exceeded 0.1s" in log_path.read_text()
+    assert "agent timeout: codex exceeded 0.5s" in log_path.read_text()
 
     del env["FAKE_CODEX_SLEEP_SECONDS"]
     (tmp_path / "codex-called").unlink()
@@ -748,7 +748,7 @@ def test_hung_required_claude_review_times_out_without_codex_fallback(
     assert timeout_bin is not None
     env.update(
         {
-            "AUTO_LOOP_AGENT_TIMEOUT_SECONDS": "0.1",
+            "AUTO_LOOP_AGENT_TIMEOUT_SECONDS": "0.5",
             "AUTO_LOOP_AGENT_KILL_AFTER_SECONDS": "0.1",
             "FAKE_CLAUDE_SLEEP_SECONDS": "2",
             "TIMEOUT_BIN": timeout_bin,
@@ -772,7 +772,7 @@ def test_hung_required_claude_review_times_out_without_codex_fallback(
     state = (project_dir / ".auto-loop/work-status.md").read_text()
     assert "phase: awaiting_claude_review" in state
     log = (project_dir / ".auto-loop/logs/auto-loop.log").read_text()
-    assert "agent timeout: claude exceeded 0.1s" in log
+    assert "agent timeout: claude exceeded 0.5s" in log
 
 
 def test_required_claude_review_never_falls_back_to_codex_on_session_limit(
