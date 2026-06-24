@@ -4,6 +4,7 @@ import json
 import os
 import shutil
 import subprocess
+import time
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -60,12 +61,15 @@ def _auto_loop_env(
         bin_dir / "claude",
         "#!/bin/sh\n"
         'touch "$FAKE_CLAUDE_CALLED"\n'
+        'if [ -n "${FAKE_CLAUDE_SLEEP_SECONDS:-}" ]; then sleep "$FAKE_CLAUDE_SLEEP_SECONDS"; fi\n'
         'printf "%s\\n" "${FAKE_CLAUDE_OUTPUT:-}"\n'
         'exit "${FAKE_CLAUDE_EXIT:-0}"\n',
     )
     _write_executable(
         bin_dir / "codex",
-        '#!/bin/sh\ntouch "$FAKE_CODEX_CALLED"\n',
+        "#!/bin/sh\n"
+        'touch "$FAKE_CODEX_CALLED"\n'
+        'if [ -n "${FAKE_CODEX_SLEEP_SECONDS:-}" ]; then sleep "$FAKE_CODEX_SLEEP_SECONDS"; fi\n',
     )
     env = os.environ.copy()
     env.update(
@@ -683,6 +687,92 @@ def test_awaiting_claude_review_retries_claude_on_scheduled_loop(tmp_path: Path)
     assert not (tmp_path / "codex-called").exists()
     log = (project_dir / ".auto-loop/logs/auto-loop.log").read_text()
     assert "조건부 Claude 리뷰 재시도" in log
+
+
+def test_hung_codex_tick_times_out_and_releases_lock_for_retry(tmp_path: Path) -> None:
+    project_dir, env, _ = _auto_loop_env(tmp_path, "idle", [])
+    timeout_bin = shutil.which("timeout") or shutil.which("gtimeout")
+    assert timeout_bin is not None
+    env.update(
+        {
+            "AUTO_LOOP_AGENT_TIMEOUT_SECONDS": "0.5",
+            "AUTO_LOOP_AGENT_KILL_AFTER_SECONDS": "0.1",
+            "FAKE_CODEX_SLEEP_SECONDS": "2",
+            "TIMEOUT_BIN": timeout_bin,
+        }
+    )
+
+    started = time.monotonic()
+    result = subprocess.run(
+        [str(project_dir / "scripts" / "auto-loop.sh")],
+        cwd=project_dir,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+        timeout=5,
+    )
+    elapsed = time.monotonic() - started
+
+    assert result.returncode == 0, result.stderr
+    assert elapsed < 1.5
+    assert not (project_dir / ".auto-loop/auto-loop.lock").exists()
+    log_path = project_dir / ".auto-loop/logs/auto-loop.log"
+    assert "agent timeout: codex exceeded 0.5s" in log_path.read_text()
+
+    del env["FAKE_CODEX_SLEEP_SECONDS"]
+    (tmp_path / "codex-called").unlink()
+    retry = subprocess.run(
+        [str(project_dir / "scripts" / "auto-loop.sh")],
+        cwd=project_dir,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+        timeout=5,
+    )
+
+    assert retry.returncode == 0, retry.stderr
+    assert (tmp_path / "codex-called").exists()
+
+
+def test_hung_required_claude_review_times_out_without_codex_fallback(
+    tmp_path: Path,
+) -> None:
+    project_dir, env, claude_called = _auto_loop_env(
+        tmp_path,
+        "awaiting_claude_review",
+        [],
+    )
+    timeout_bin = shutil.which("timeout") or shutil.which("gtimeout")
+    assert timeout_bin is not None
+    env.update(
+        {
+            "AUTO_LOOP_AGENT_TIMEOUT_SECONDS": "0.5",
+            "AUTO_LOOP_AGENT_KILL_AFTER_SECONDS": "0.1",
+            "FAKE_CLAUDE_SLEEP_SECONDS": "2",
+            "TIMEOUT_BIN": timeout_bin,
+        }
+    )
+
+    result = subprocess.run(
+        [str(project_dir / "scripts" / "auto-loop.sh")],
+        cwd=project_dir,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+        timeout=5,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert claude_called.exists()
+    assert not (tmp_path / "codex-called").exists()
+    assert not (project_dir / ".auto-loop/auto-loop.lock").exists()
+    state = (project_dir / ".auto-loop/work-status.md").read_text()
+    assert "phase: awaiting_claude_review" in state
+    log = (project_dir / ".auto-loop/logs/auto-loop.log").read_text()
+    assert "agent timeout: claude exceeded 0.5s" in log
 
 
 def test_required_claude_review_never_falls_back_to_codex_on_session_limit(
