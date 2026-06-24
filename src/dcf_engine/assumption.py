@@ -5,7 +5,10 @@ from __future__ import annotations
 import math
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
-from typing import Final, Literal
+from typing import Final, Literal, overload
+
+import numpy as np
+from numpy.typing import NDArray
 
 from dcf_engine.distributions import DistributionFamily, lognormal_scale_from_three_points
 from dcf_engine.lifecycle import LifecycleStage
@@ -60,6 +63,7 @@ class AssumptionState:
         return replace(self, current_mu=current_mu)
 
 
+@overload
 def compute_reinvestment(
     stage: LifecycleStage,
     *,
@@ -67,8 +71,29 @@ def compute_reinvestment(
     nopat: float,
     growth: float,
     tool_value: float,
-) -> float:
-    if tool_value <= 0:
+) -> float: ...
+
+
+@overload
+def compute_reinvestment(
+    stage: LifecycleStage,
+    *,
+    delta_revenue: NDArray[np.float64],
+    nopat: NDArray[np.float64],
+    growth: NDArray[np.float64],
+    tool_value: NDArray[np.float64],
+) -> NDArray[np.float64]: ...
+
+
+def compute_reinvestment(
+    stage: LifecycleStage,
+    *,
+    delta_revenue: float | NDArray[np.float64],
+    nopat: float | NDArray[np.float64],
+    growth: float | NDArray[np.float64],
+    tool_value: float | NDArray[np.float64],
+) -> float | NDArray[np.float64]:
+    if np.any(tool_value <= 0):
         raise ValueError("tool_value must be positive")
     if REINVESTMENT_TOOL_BY_STAGE[stage] == "sales_to_capital":
         return delta_revenue / tool_value

@@ -5,15 +5,13 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 from math import isfinite
-from typing import overload
 
 import numpy as np
 from numpy.typing import NDArray
 
-from dcf_engine.projection_validation import (
-    validate_projection_inputs,
-    validated_samples,
-)
+from dcf_engine import projection_validation
+from dcf_engine.assumption import REINVESTMENT_TOOL_BY_STAGE, compute_reinvestment
+from dcf_engine.lifecycle import LifecycleStage
 
 
 @dataclass(frozen=True)
@@ -22,29 +20,42 @@ class ProjectionInputs:
     revenue_growth: float
     operating_margin: float
     tax_rate: float
-    sales_to_capital_ratio: float
     wacc: float
     terminal_growth: float
     forecast_years: int
+    sales_to_capital_ratio: float | None = None
+    roic: float | None = None
+    stage: LifecycleStage = "growth"
 
     def __post_init__(self) -> None:
-        validate_projection_inputs(
+        projection_validation.validate_projection_inputs(
             initial_revenue=self.initial_revenue,
             revenue_growth=self.revenue_growth,
             operating_margin=self.operating_margin,
             tax_rate=self.tax_rate,
-            sales_to_capital_ratio=self.sales_to_capital_ratio,
             wacc=self.wacc,
             terminal_growth=self.terminal_growth,
             forecast_years=self.forecast_years,
+            stage=self.stage,
+            sales_to_capital_ratio=self.sales_to_capital_ratio,
+            roic=self.roic,
         )
+
+    @property
+    def reinvestment_tool_value(self) -> float:
+        tool = REINVESTMENT_TOOL_BY_STAGE[self.stage]
+        value = self.sales_to_capital_ratio if tool == "sales_to_capital" else self.roic
+        assert value is not None
+        return value
 
 
 @dataclass(frozen=True)
 class ProjectionResult:
     yearly_revenue: NDArray[np.float64]
+    yearly_reinvestment: NDArray[np.float64]
     yearly_fcff: NDArray[np.float64]
     discounted_fcff: NDArray[np.float64]
+    terminal_reinvestment: float
     terminal_fcff: float
     terminal_value: float
     discounted_terminal_value: float
@@ -53,30 +64,36 @@ class ProjectionResult:
 
 def project_going_concern(inputs: ProjectionInputs) -> ProjectionResult:
     yearly_revenue = np.empty(inputs.forecast_years, dtype=np.float64)
+    yearly_reinvestment = np.empty(inputs.forecast_years, dtype=np.float64)
     yearly_fcff = np.empty(inputs.forecast_years, dtype=np.float64)
     discounted_fcff = np.empty(inputs.forecast_years, dtype=np.float64)
     previous_revenue = inputs.initial_revenue
     for index in range(inputs.forecast_years):
         revenue = previous_revenue * (1.0 + inputs.revenue_growth)
-        fcff = _fcff(
+        fcff, reinvestment = _scalar_fcff(
+            inputs.stage,
             previous_revenue,
             revenue,
             inputs.operating_margin,
             inputs.tax_rate,
-            inputs.sales_to_capital_ratio,
+            inputs.revenue_growth,
+            inputs.reinvestment_tool_value,
         )
         yearly_revenue[index] = revenue
+        yearly_reinvestment[index] = reinvestment
         yearly_fcff[index] = fcff
         discounted_fcff[index] = fcff / (1.0 + inputs.wacc) ** (index + 1)
         previous_revenue = revenue
 
     terminal_revenue = previous_revenue * (1.0 + inputs.terminal_growth)
-    terminal_fcff = _fcff(
+    terminal_fcff, terminal_reinvestment = _scalar_fcff(
+        inputs.stage,
         previous_revenue,
         terminal_revenue,
         inputs.operating_margin,
         inputs.tax_rate,
-        inputs.sales_to_capital_ratio,
+        inputs.terminal_growth,
+        inputs.reinvestment_tool_value,
     )
     terminal_value = terminal_fcff / (inputs.wacc - inputs.terminal_growth)
     discounted_terminal_value = terminal_value / (1.0 + inputs.wacc) ** inputs.forecast_years
@@ -85,8 +102,10 @@ def project_going_concern(inputs: ProjectionInputs) -> ProjectionResult:
         raise ValueError("going_concern_firm_value must be finite")
     return ProjectionResult(
         yearly_revenue=yearly_revenue,
+        yearly_reinvestment=yearly_reinvestment,
         yearly_fcff=yearly_fcff,
         discounted_fcff=discounted_fcff,
+        terminal_reinvestment=terminal_reinvestment,
         terminal_fcff=terminal_fcff,
         terminal_value=terminal_value,
         discounted_terminal_value=discounted_terminal_value,
@@ -99,16 +118,15 @@ def going_concern_value_samples(
     initial_revenue: float,
     assumption_samples: Mapping[str, NDArray[np.float64]],
     forecast_years: int,
+    stage: LifecycleStage = "growth",
 ) -> NDArray[np.float64]:
-    samples = validated_samples(
+    samples = projection_validation.validated_samples(
         initial_revenue=initial_revenue,
         assumption_samples=assumption_samples,
         forecast_years=forecast_years,
+        stage=stage,
     )
     growth = samples["REVENUE_CAGR"]
-    margin = samples["OPERATING_MARGIN"]
-    tax_rate = samples["TAX_RATE"]
-    sales_to_capital = samples["SALES_TO_CAPITAL_RATIO"]
     wacc = samples["WACC"]
     terminal_growth = samples["TERMINAL_GROWTH"]
 
@@ -116,12 +134,24 @@ def going_concern_value_samples(
     operating_value = np.zeros(growth.shape, dtype=np.float64)
     for year in range(1, forecast_years + 1):
         next_revenue = revenue * (1.0 + growth)
-        yearly_fcff = _fcff(revenue, next_revenue, margin, tax_rate, sales_to_capital)
+        yearly_fcff = _sample_fcff(
+            stage,
+            revenue,
+            next_revenue,
+            growth,
+            samples,
+        )
         operating_value += yearly_fcff / (1.0 + wacc) ** year
         revenue = next_revenue
 
     terminal_revenue = revenue * (1.0 + terminal_growth)
-    terminal_fcff = _fcff(revenue, terminal_revenue, margin, tax_rate, sales_to_capital)
+    terminal_fcff = _sample_fcff(
+        stage,
+        revenue,
+        terminal_revenue,
+        terminal_growth,
+        samples,
+    )
     terminal_value = terminal_fcff / (wacc - terminal_growth)
     values = operating_value + terminal_value / (1.0 + wacc) ** forecast_years
     if not np.all(np.isfinite(values)):
@@ -129,33 +159,39 @@ def going_concern_value_samples(
     return np.asarray(values, dtype=np.float64)
 
 
-@overload
-def _fcff(
+def _scalar_fcff(
+    stage: LifecycleStage,
     previous_revenue: float,
     revenue: float,
     operating_margin: float,
     tax_rate: float,
-    sales_to_capital_ratio: float,
-) -> float: ...
+    growth: float,
+    reinvestment_tool: float,
+) -> tuple[float, float]:
+    nopat = revenue * operating_margin * (1.0 - tax_rate)
+    reinvestment = compute_reinvestment(
+        stage,
+        delta_revenue=revenue - previous_revenue,
+        nopat=nopat,
+        growth=growth,
+        tool_value=reinvestment_tool,
+    )
+    return nopat - reinvestment, reinvestment
 
 
-@overload
-def _fcff(
+def _sample_fcff(
+    stage: LifecycleStage,
     previous_revenue: NDArray[np.float64],
     revenue: NDArray[np.float64],
-    operating_margin: NDArray[np.float64],
-    tax_rate: NDArray[np.float64],
-    sales_to_capital_ratio: NDArray[np.float64],
-) -> NDArray[np.float64]: ...
-
-
-def _fcff(
-    previous_revenue: float | NDArray[np.float64],
-    revenue: float | NDArray[np.float64],
-    operating_margin: float | NDArray[np.float64],
-    tax_rate: float | NDArray[np.float64],
-    sales_to_capital_ratio: float | NDArray[np.float64],
-) -> float | NDArray[np.float64]:
-    nopat = revenue * operating_margin * (1.0 - tax_rate)
-    reinvestment = (revenue - previous_revenue) / sales_to_capital_ratio
-    return nopat - reinvestment
+    growth: NDArray[np.float64],
+    samples: Mapping[str, NDArray[np.float64]],
+) -> NDArray[np.float64]:
+    nopat = revenue * samples["OPERATING_MARGIN"] * (1.0 - samples["TAX_RATE"])
+    reinvestment = compute_reinvestment(
+        stage,
+        delta_revenue=revenue - previous_revenue,
+        nopat=nopat,
+        growth=growth,
+        tool_value=samples[projection_validation.active_reinvestment_sample_name(stage)],
+    )
+    return np.asarray(nopat - reinvestment, dtype=np.float64)
