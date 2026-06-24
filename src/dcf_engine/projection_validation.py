@@ -9,14 +9,20 @@ from typing import Final
 import numpy as np
 from numpy.typing import NDArray
 
-ASSUMPTION_SAMPLE_NAMES: Final[tuple[str, ...]] = (
+from dcf_engine.assumption import REINVESTMENT_TOOL_BY_STAGE, ReinvestmentTool
+from dcf_engine.lifecycle import LifecycleStage
+
+COMMON_ASSUMPTION_SAMPLE_NAMES: Final[tuple[str, ...]] = (
     "REVENUE_CAGR",
     "OPERATING_MARGIN",
     "TAX_RATE",
-    "SALES_TO_CAPITAL_RATIO",
     "WACC",
     "TERMINAL_GROWTH",
 )
+SAMPLE_NAME_BY_REINVESTMENT_TOOL: Final[dict[ReinvestmentTool, str]] = {
+    "sales_to_capital": "SALES_TO_CAPITAL_RATIO",
+    "roic": "ROIC",
+}
 MIN_RATE: Final = -1.0
 MIN_REVENUE: Final = 0.0
 MIN_TAX_RATE: Final = 0.0
@@ -30,17 +36,18 @@ def validate_projection_inputs(
     revenue_growth: float,
     operating_margin: float,
     tax_rate: float,
-    sales_to_capital_ratio: float,
     wacc: float,
     terminal_growth: float,
     forecast_years: int,
+    stage: LifecycleStage,
+    sales_to_capital_ratio: float | None,
+    roic: float | None,
 ) -> None:
     values = {
         "initial_revenue": initial_revenue,
         "revenue_growth": revenue_growth,
         "operating_margin": operating_margin,
         "tax_rate": tax_rate,
-        "sales_to_capital_ratio": sales_to_capital_ratio,
         "wacc": wacc,
         "terminal_growth": terminal_growth,
     }
@@ -53,8 +60,11 @@ def validate_projection_inputs(
         raise ValueError("revenue_growth must be greater than -1")
     if not MIN_TAX_RATE <= tax_rate <= MAX_TAX_RATE:
         raise ValueError("tax_rate must be between 0 and 1")
-    if sales_to_capital_ratio <= 0.0:
-        raise ValueError("sales_to_capital_ratio must be positive")
+    validate_reinvestment_tool_value(
+        stage=stage,
+        sales_to_capital_ratio=sales_to_capital_ratio,
+        roic=roic,
+    )
     if wacc <= MIN_RATE:
         raise ValueError("wacc must be greater than -1")
     if terminal_growth <= MIN_RATE:
@@ -70,28 +80,53 @@ def validated_samples(
     initial_revenue: float,
     assumption_samples: Mapping[str, NDArray[np.float64]],
     forecast_years: int,
+    stage: LifecycleStage,
 ) -> dict[str, NDArray[np.float64]]:
-    missing = set(ASSUMPTION_SAMPLE_NAMES) - assumption_samples.keys()
+    active_tool = active_reinvestment_sample_name(stage)
+    sample_names = (*COMMON_ASSUMPTION_SAMPLE_NAMES, active_tool)
+    missing = set(sample_names) - assumption_samples.keys()
     if missing:
         raise ValueError(f"missing assumption samples: {', '.join(sorted(missing))}")
     samples = {
         name: np.asarray(assumption_samples[name], dtype=np.float64)
-        for name in ASSUMPTION_SAMPLE_NAMES
+        for name in sample_names
     }
-    expected_shape = samples[ASSUMPTION_SAMPLE_NAMES[0]].shape
+    expected_shape = samples[COMMON_ASSUMPTION_SAMPLE_NAMES[0]].shape
     for name, values in samples.items():
         if values.shape != expected_shape:
             raise ValueError("assumption samples must have matching shapes")
         if not np.all(np.isfinite(values)):
             raise ValueError(f"{name} samples must be finite")
-    _validate_sample_ranges(initial_revenue, samples, forecast_years)
+    _validate_sample_ranges(initial_revenue, samples, forecast_years, active_tool)
     return samples
+
+
+def active_reinvestment_sample_name(stage: LifecycleStage) -> str:
+    return SAMPLE_NAME_BY_REINVESTMENT_TOOL[REINVESTMENT_TOOL_BY_STAGE[stage]]
+
+
+def validate_reinvestment_tool_value(
+    *,
+    stage: LifecycleStage,
+    sales_to_capital_ratio: float | None,
+    roic: float | None,
+) -> None:
+    tool = REINVESTMENT_TOOL_BY_STAGE[stage]
+    name = "sales_to_capital_ratio" if tool == "sales_to_capital" else "roic"
+    value = sales_to_capital_ratio if tool == "sales_to_capital" else roic
+    if value is None:
+        raise ValueError(f"{name} is required for {stage} projections")
+    if not isfinite(value):
+        raise ValueError(f"{name} must be finite")
+    if value <= 0.0:
+        raise ValueError(f"{name} must be positive")
 
 
 def _validate_sample_ranges(
     initial_revenue: float,
     samples: Mapping[str, NDArray[np.float64]],
     forecast_years: int,
+    active_tool: str,
 ) -> None:
     if not isfinite(initial_revenue) or initial_revenue < MIN_REVENUE:
         raise ValueError("initial_revenue must be finite and nonnegative")
@@ -103,8 +138,8 @@ def _validate_sample_ranges(
         (samples["TAX_RATE"] < MIN_TAX_RATE) | (samples["TAX_RATE"] > MAX_TAX_RATE)
     ):
         raise ValueError("TAX_RATE samples must be between 0 and 1")
-    if np.any(samples["SALES_TO_CAPITAL_RATIO"] <= 0.0):
-        raise ValueError("SALES_TO_CAPITAL_RATIO samples must be positive")
+    if np.any(samples[active_tool] <= 0.0):
+        raise ValueError(f"{active_tool} samples must be positive")
     if np.any(samples["WACC"] <= MIN_RATE):
         raise ValueError("WACC samples must be greater than -1")
     if np.any(samples["TERMINAL_GROWTH"] <= MIN_RATE):

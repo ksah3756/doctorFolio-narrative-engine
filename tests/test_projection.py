@@ -3,6 +3,7 @@ from dataclasses import replace
 import numpy as np
 import pytest
 
+from dcf_engine.lifecycle import LifecycleStage
 from dcf_engine.projection import (
     ProjectionInputs,
     going_concern_value_samples,
@@ -34,6 +35,101 @@ def test_constant_assumption_path_matches_hand_calculated_fcff_and_value() -> No
     assert projection.terminal_value == pytest.approx(216.2875)
     assert projection.discounted_terminal_value == pytest.approx(216.2875 / 1.10**2)
     assert projection.going_concern_firm_value == pytest.approx(199.6590909091)
+
+
+def test_mature_roic_path_matches_hand_calculated_reinvestment_and_value() -> None:
+    projection = project_going_concern(
+        ProjectionInputs(
+            initial_revenue=100.0,
+            revenue_growth=0.05,
+            operating_margin=0.20,
+            tax_rate=0.25,
+            roic=0.15,
+            wacc=0.10,
+            terminal_growth=0.02,
+            forecast_years=2,
+            stage="mature",
+        )
+    )
+
+    np.testing.assert_allclose(projection.yearly_revenue, [105.0, 110.25])
+    np.testing.assert_allclose(projection.yearly_reinvestment, [5.25, 5.5125])
+    np.testing.assert_allclose(projection.yearly_fcff, [10.50, 11.025])
+    np.testing.assert_allclose(
+        projection.discounted_fcff,
+        [10.50 / 1.10, 11.025 / 1.10**2],
+    )
+    assert projection.terminal_reinvestment == pytest.approx(2.2491)
+    assert projection.terminal_fcff == pytest.approx(14.61915)
+    assert projection.terminal_value == pytest.approx(182.739375)
+    assert projection.discounted_terminal_value == pytest.approx(151.0242768595)
+    assert projection.going_concern_firm_value == pytest.approx(169.6813016529)
+
+
+@pytest.mark.parametrize(
+    ("stage", "expected_fcff"),
+    [
+        ("young", 11.50),
+        ("growth", 11.50),
+        ("mature", 5.50),
+        ("decline", 5.50),
+    ],
+)
+def test_lifecycle_stage_selects_exactly_one_reinvestment_tool(
+    stage: LifecycleStage,
+    expected_fcff: float,
+) -> None:
+    projection = project_going_concern(
+        replace(
+            _base_inputs(),
+            stage=stage,
+            roic=0.15,
+            forecast_years=1,
+        )
+    )
+
+    assert projection.yearly_fcff[0] == pytest.approx(expected_fcff)
+
+
+@pytest.mark.parametrize(
+    ("stage", "field", "message"),
+    [
+        ("growth", "sales_to_capital_ratio", "sales_to_capital_ratio is required"),
+        ("mature", "roic", "roic is required"),
+    ],
+)
+def test_projection_requires_the_active_reinvestment_tool(
+    stage: LifecycleStage,
+    field: str,
+    message: str,
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        _replace_optional_float_field(
+            replace(_base_inputs(), stage=stage, roic=0.15),
+            field,
+            None,
+        )
+
+
+@pytest.mark.parametrize(
+    ("stage", "field"),
+    [
+        ("growth", "sales_to_capital_ratio"),
+        ("mature", "roic"),
+    ],
+)
+@pytest.mark.parametrize("invalid", [0.0, -1.0, np.nan, np.inf, -np.inf])
+def test_projection_rejects_invalid_active_reinvestment_tool(
+    stage: LifecycleStage,
+    field: str,
+    invalid: float,
+) -> None:
+    with pytest.raises(ValueError, match=field):
+        _replace_optional_float_field(
+            replace(_base_inputs(), stage=stage, roic=0.15),
+            field,
+            invalid,
+        )
 
 
 @pytest.mark.parametrize(
@@ -96,6 +192,48 @@ def test_going_concern_samples_reject_non_finite_values() -> None:
         )
 
 
+@pytest.mark.parametrize(
+    ("stage", "active_sample"),
+    [("growth", "SALES_TO_CAPITAL_RATIO"), ("mature", "ROIC")],
+)
+def test_going_concern_samples_require_the_active_reinvestment_tool(
+    stage: LifecycleStage,
+    active_sample: str,
+) -> None:
+    samples = _stage_assumption_samples(stage)
+    samples.pop(active_sample)
+
+    with pytest.raises(ValueError, match=f"missing assumption samples: {active_sample}"):
+        going_concern_value_samples(
+            initial_revenue=100.0,
+            assumption_samples=samples,
+            forecast_years=3,
+            stage=stage,
+        )
+
+
+@pytest.mark.parametrize(
+    ("stage", "active_sample"),
+    [("growth", "SALES_TO_CAPITAL_RATIO"), ("mature", "ROIC")],
+)
+@pytest.mark.parametrize("invalid", [0.0, -1.0, np.nan, np.inf, -np.inf])
+def test_going_concern_samples_reject_invalid_active_reinvestment_tool(
+    stage: LifecycleStage,
+    active_sample: str,
+    invalid: float,
+) -> None:
+    samples = _stage_assumption_samples(stage)
+    samples[active_sample][0, 0] = invalid
+
+    with pytest.raises(ValueError, match=active_sample):
+        going_concern_value_samples(
+            initial_revenue=100.0,
+            assumption_samples=samples,
+            forecast_years=3,
+            stage=stage,
+        )
+
+
 def _base_inputs() -> ProjectionInputs:
     return ProjectionInputs(
         initial_revenue=100.0,
@@ -129,6 +267,26 @@ def _replace_float_field(
     if field == "terminal_growth":
         return replace(inputs, terminal_growth=value)
     raise AssertionError(f"unknown projection field: {field}")
+
+
+def _replace_optional_float_field(
+    inputs: ProjectionInputs,
+    field: str,
+    value: float | None,
+) -> ProjectionInputs:
+    if field == "sales_to_capital_ratio":
+        return replace(inputs, sales_to_capital_ratio=value)
+    if field == "roic":
+        return replace(inputs, roic=value)
+    raise AssertionError(f"unknown projection tool field: {field}")
+
+
+def _stage_assumption_samples(stage: LifecycleStage) -> dict[str, np.ndarray]:
+    samples = _seeded_assumption_samples(35)
+    if stage == "mature":
+        samples.pop("SALES_TO_CAPITAL_RATIO")
+        samples["ROIC"] = np.full((2, 3), 0.15, dtype=np.float64)
+    return samples
 
 
 def _seeded_assumption_samples(seed: int) -> dict[str, np.ndarray]:
