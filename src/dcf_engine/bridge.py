@@ -39,8 +39,9 @@ class BridgeInputs:
     option_value: float
 
     def __post_init__(self) -> None:
+        if not isfinite(self.going_concern_firm_value):
+            raise ValueError("going_concern_firm_value must be finite")
         nonnegative_values = {
-            "going_concern_firm_value": self.going_concern_firm_value,
             "liquidation_firm_value": self.liquidation_firm_value,
             "interest_bearing_debt": self.interest_bearing_debt,
             "lease_liability": self.lease_liability,
@@ -103,12 +104,8 @@ def equity_value_samples(
             raise ValueError(
                 "going_concern_firm_value_samples must match probability sample shape"
             )
-        if not np.all(np.isfinite(going_concern)) or np.any(
-            going_concern < MIN_BRIDGE_VALUE
-        ):
-            raise ValueError(
-                "going_concern_firm_value_samples must be finite and nonnegative"
-            )
+        if not np.all(np.isfinite(going_concern)):
+            raise ValueError("going_concern_firm_value_samples must be finite")
 
     distress_adjusted = _distress_adjusted_firm_value(
         going_concern,
