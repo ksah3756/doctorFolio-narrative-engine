@@ -16,6 +16,15 @@ def test_monte_carlo_samples_flow_through_dcf_and_distress_bridge() -> None:
     np.testing.assert_array_equal(first, second)
 
 
+def test_mature_monte_carlo_samples_flow_deterministically_to_equity() -> None:
+    first = _run_mature_pipeline(seed=20260624)
+    second = _run_mature_pipeline(seed=20260624)
+
+    assert first.shape == (64,)
+    assert np.all(np.isfinite(first))
+    np.testing.assert_array_equal(first, second)
+
+
 def test_equity_samples_do_not_increase_with_default_probability() -> None:
     probabilities = np.linspace(0.0, 1.0, num=11, dtype=np.float64)
     assumption_samples = _constant_assumption_samples(probabilities.shape)
@@ -113,6 +122,28 @@ def _run_pipeline(*, seed: int) -> np.ndarray:
     )
 
 
+def _run_mature_pipeline(*, seed: int) -> np.ndarray:
+    result = mc_run(
+        factor_states={},
+        assumptions=_mature_assumptions(),
+        stage="mature",
+        regime="normal",
+        company=_company(),
+        config=MonteCarloConfig(iterations=64, seed=seed),
+    )
+    going_concern = going_concern_value_samples(
+        initial_revenue=100.0,
+        assumption_samples=result.samples,
+        forecast_years=3,
+        stage="mature",
+    )
+    return equity_value_samples(
+        _bridge_inputs(liquidation_firm_value=20.0),
+        result.samples["DEFAULT_PROBABILITY"],
+        going_concern_firm_value_samples=going_concern,
+    )
+
+
 def _constant_assumption_samples(shape: tuple[int, ...]) -> dict[str, np.ndarray]:
     values = {
         "REVENUE_CAGR": 0.08,
@@ -135,6 +166,18 @@ def _assumptions() -> list[AssumptionState]:
         _assumption("TAX_RATE", 0.20, 0.005, "normal"),
         _assumption("SALES_TO_CAPITAL_RATIO", 2.0, 0.05, "lognormal"),
         _assumption("WACC", 0.10, 0.002, "normal"),
+        _assumption("TERMINAL_GROWTH", 0.02, 0.001, "normal"),
+        _assumption("DEFAULT_PROBABILITY", 0.05, 0.01, "beta"),
+    ]
+
+
+def _mature_assumptions() -> list[AssumptionState]:
+    return [
+        _assumption("REVENUE_CAGR", 0.04, 0.005, "normal"),
+        _assumption("OPERATING_MARGIN", 0.20, 0.01, "normal"),
+        _assumption("TAX_RATE", 0.20, 0.005, "normal"),
+        _assumption("ROIC", 0.15, 0.01, "lognormal"),
+        _assumption("WACC", 0.09, 0.002, "normal"),
         _assumption("TERMINAL_GROWTH", 0.02, 0.001, "normal"),
         _assumption("DEFAULT_PROBABILITY", 0.05, 0.01, "beta"),
     ]
