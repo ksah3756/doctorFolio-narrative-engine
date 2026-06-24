@@ -145,6 +145,8 @@ as `pr_approval_message_id`; escalations wait for Claude.
 Inspect only `.auto-loop/tasks/issue-<N>.json`:
 
 - `running`: leave state unchanged and stop.
+- `retryable` at stage `review`: the Shell router dispatches `--review-only` on the
+  next scheduled tick. Do not rerun implementation or send a failure notification.
 - `failed`: leave state unchanged and report its JSONL log path to stdout.
 - `completed`: the wrapper should already have moved state to `awaiting_pr`. If state
   still says implementing, report a state mismatch; do not repeat review or delivery.
