@@ -102,6 +102,7 @@ if [ ! -f "$CODEX_PROMPT_FILE" ]; then log "Codex 프롬프트 파일 없음: $C
 # --- 실행 ---
 phase="$(current_phase)"
 runner="$AUTO_LOOP_RUNNER"
+required_claude_review=0
 
 if [ "$runner" = "auto" ]; then
   runner="codex"
@@ -112,8 +113,9 @@ if [[ "$phase" == "awaiting_pr" ]]; then
   exit 0
 fi
 if [[ "$phase" == "awaiting_claude_review" ]]; then
-  log "phase awaiting_claude_review: Discord 조건부 Claude 리뷰가 처리, 정각 LLM 호출 생략"
-  exit 0
+  runner="claude"
+  required_claude_review=1
+  log "phase awaiting_claude_review: 조건부 Claude 리뷰 재시도"
 fi
 
 log "===== auto-loop 발화 시작 (phase ${phase:-unknown}, runner $runner) ====="
@@ -128,7 +130,9 @@ case "$runner" in
     status=$?
     cat "$tmp_log" >>"$LOG_FILE"
     if [ "$status" -ne 0 ] && has_claude_session_limit "$tmp_log"; then
-      if [ -x "$CODEX_BIN" ]; then
+      if [ "$required_claude_review" -eq 1 ]; then
+        log "필수 Claude 리뷰 세션 리미트: Codex fallback 금지, 다음 정각 재시도"
+      elif [ -x "$CODEX_BIN" ]; then
         log "Claude 세션 리미트 감지, Codex fallback 실행"
         run_codex >>"$LOG_FILE" 2>&1
         status=$?

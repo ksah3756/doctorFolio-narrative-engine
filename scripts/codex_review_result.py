@@ -32,6 +32,7 @@ NUMERIC_CORE_FILES = {
     "src/dcf_engine/factor.py",
     "src/dcf_engine/lifecycle.py",
     "src/dcf_engine/loading.py",
+    "src/dcf_engine/mature_case.py",
     "src/dcf_engine/monte_carlo.py",
     "src/dcf_engine/routing.py",
 }

@@ -58,7 +58,10 @@ def _auto_loop_env(
     codex_called = tmp_path / "codex-called"
     _write_executable(
         bin_dir / "claude",
-        '#!/bin/sh\ntouch "$FAKE_CLAUDE_CALLED"\n',
+        "#!/bin/sh\n"
+        'touch "$FAKE_CLAUDE_CALLED"\n'
+        'printf "%s\\n" "${FAKE_CLAUDE_OUTPUT:-}"\n'
+        'exit "${FAKE_CLAUDE_EXIT:-0}"\n',
     )
     _write_executable(
         bin_dir / "codex",
@@ -301,6 +304,8 @@ def test_review_result_posts_without_mentions_and_arms_current_pr_gate(
     )
     prompt_file = project_dir / "task.md"
     prompt_file.write_text("Implement the approved issue.\n")
+    legacy_review = project_dir / "REVIEW-1.md"
+    legacy_review.write_text("another issue review\n")
     env, _, _ = _runner_env(tmp_path, project_dir)
     env.update(
         {
@@ -355,6 +360,8 @@ def test_review_result_posts_without_mentions_and_arms_current_pr_gate(
     assert "<@" not in content
     assert "Claude" not in content
     assert payloads[0]["allowed_mentions"] == {"parse": []}
+    assert legacy_review.read_text() == "another issue review\n"
+    assert (project_dir / "REVIEW-44-1.md").exists()
 
     state = (state_dir / "work-status.md").read_text()
     assert "phase: awaiting_pr" in state
@@ -468,7 +475,7 @@ def test_numeric_core_change_escalates_even_when_codex_finds_no_p1(
         {
             "AUTO_LOOP_DISABLE_DISCORD": "0",
             "DISCORD_WEBHOOK_URL": "https://discord.invalid/webhook",
-            "FAKE_IMPLEMENTATION_PATH": "src/dcf_engine/monte_carlo.py",
+            "FAKE_IMPLEMENTATION_PATH": "src/dcf_engine/mature_case.py",
         }
     )
 
@@ -611,6 +618,12 @@ def test_active_review_flow_uses_only_conditional_claude_escalation() -> None:
     assert "awaiting_claude_review" in review_flow
 
 
+def test_codex_output_schema_uses_only_supported_array_keywords() -> None:
+    schema = json.loads((REPO_ROOT / "scripts/codex-review-schema.json").read_text())
+
+    assert "uniqueItems" not in schema["properties"]["escalation_reasons"]
+
+
 def test_auto_loop_prompts_delegate_without_omc_team() -> None:
     for prompt_name in ("auto-loop-prompt.md", "codex-auto-loop-prompt.md"):
         prompt = (REPO_ROOT / "scripts" / prompt_name).read_text()
@@ -649,7 +662,7 @@ def test_awaiting_pr_always_defers_to_shell_poller(tmp_path: Path) -> None:
     assert "10분 PR 승인 poller" in log
 
 
-def test_awaiting_claude_review_does_not_wake_scheduled_llm(tmp_path: Path) -> None:
+def test_awaiting_claude_review_retries_claude_on_scheduled_loop(tmp_path: Path) -> None:
     project_dir, env, claude_called = _auto_loop_env(
         tmp_path,
         "awaiting_claude_review",
@@ -666,10 +679,43 @@ def test_awaiting_claude_review_does_not_wake_scheduled_llm(tmp_path: Path) -> N
     )
 
     assert result.returncode == 0, result.stderr
-    assert not claude_called.exists()
+    assert claude_called.exists()
     assert not (tmp_path / "codex-called").exists()
     log = (project_dir / ".auto-loop/logs/auto-loop.log").read_text()
-    assert "Discord 조건부 Claude 리뷰가 처리" in log
+    assert "조건부 Claude 리뷰 재시도" in log
+
+
+def test_required_claude_review_never_falls_back_to_codex_on_session_limit(
+    tmp_path: Path,
+) -> None:
+    project_dir, env, claude_called = _auto_loop_env(
+        tmp_path,
+        "awaiting_claude_review",
+        [],
+    )
+    env.update(
+        {
+            "FAKE_CLAUDE_EXIT": "7",
+            "FAKE_CLAUDE_OUTPUT": "You've hit your session limit",
+        }
+    )
+
+    result = subprocess.run(
+        [str(project_dir / "scripts" / "auto-loop.sh")],
+        cwd=project_dir,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert claude_called.exists()
+    assert not (tmp_path / "codex-called").exists()
+    state = (project_dir / ".auto-loop/work-status.md").read_text()
+    assert "phase: awaiting_claude_review" in state
+    log = (project_dir / ".auto-loop/logs/auto-loop.log").read_text()
+    assert "Codex fallback 금지" in log
 
 
 def test_legacy_awaiting_approval_runs_codex_without_new_user_message(tmp_path: Path) -> None:
