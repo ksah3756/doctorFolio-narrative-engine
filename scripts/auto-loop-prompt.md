@@ -42,7 +42,10 @@
 
 우선순위 체인으로 **딱 하나** 계획을 만든다:
 1. `gh issue list -R ksah3756/doctorFolio-narrative-engine --state open` → 열린 이슈 있으면 최우선 1개 선택.
-2. 없으면 → docs/plan/design-* 를 읽고 다음 항목 계획화.
+2. 없으면 → `docs/plan/*.md` 전체를 읽는다. 파일명의 가장 높은 `vN`을 primary plan으로
+   선택하고, 버전이 같으면 최신 `YYYY-MM-DD`를 우선한다. 이전 문서는 보조 맥락으로만
+   사용하며 충돌하면 primary plan을 따른다. 현재 primary는
+   `narrative-architecture-v6-2026-06-25.md`다.
 3. 둘 다 없으면 → 상태파일 Done과 프로젝트 맥락 보고 **새 작업 직접 제안**.
 
 그 다음:

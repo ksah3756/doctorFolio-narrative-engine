@@ -61,7 +61,10 @@ Choose exactly one task:
 
 1. Run `gh issue list -R ksah3756/doctorFolio-narrative-engine --state open`
    and choose the highest-priority open issue.
-2. If no open issue exists, read `docs/plan/design-*` and plan the next item.
+2. If no open issue exists, read all `docs/plan/*.md`. Select the primary plan by
+   highest filename `vN`, breaking version ties by latest `YYYY-MM-DD`; use older
+   plans only as supporting context and let the primary plan win conflicts. With the
+   current files, `narrative-architecture-v6-2026-06-25.md` is primary.
 3. If neither exists, use `.auto-loop/work-status.md` Done/current context to propose
    one new task.
 
