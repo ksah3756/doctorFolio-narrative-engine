@@ -635,6 +635,16 @@ def test_auto_loop_prompts_delegate_without_omc_team() -> None:
         assert "dispatch-codex-task.sh" in prompt
 
 
+def test_auto_loop_prompts_prioritize_the_latest_versioned_plan() -> None:
+    for prompt_name in ("auto-loop-prompt.md", "codex-auto-loop-prompt.md"):
+        prompt = (REPO_ROOT / "scripts" / prompt_name).read_text()
+        assert "`docs/plan/*.md`" in prompt
+        assert "docs/plan/design-*" not in prompt
+        assert "`vN`" in prompt
+        assert "`YYYY-MM-DD`" in prompt
+        assert "`narrative-architecture-v6-2026-06-25.md`" in prompt
+
+
 def test_auto_loop_codex_fallback_uses_high_reasoning() -> None:
     script = (REPO_ROOT / "scripts" / "auto-loop.sh").read_text()
     assert 'model_reasoning_effort="high"' in script
