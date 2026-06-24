@@ -153,6 +153,8 @@ def equity_value(inputs: BridgeInputs) -> float:
 def equity_value_samples(
     base: BridgeInputs,
     default_probability_samples: NDArray[np.float64],
+    *,
+    going_concern_firm_value_samples: NDArray[np.float64] | None = None,
 ) -> NDArray[np.float64]:
     probabilities = np.asarray(default_probability_samples, dtype=np.float64)
     if not np.all(np.isfinite(probabilities)) or np.any(
@@ -163,8 +165,25 @@ def equity_value_samples(
             "default_probability_samples must be finite and between 0 and 1"
         )
 
+    going_concern: float | NDArray[np.float64] = base.going_concern_firm_value
+    if going_concern_firm_value_samples is not None:
+        going_concern = np.asarray(
+            going_concern_firm_value_samples,
+            dtype=np.float64,
+        )
+        if going_concern.shape != probabilities.shape:
+            raise ValueError(
+                "going_concern_firm_value_samples must match probability sample shape"
+            )
+        if not np.all(np.isfinite(going_concern)) or np.any(
+            going_concern < MIN_BRIDGE_VALUE
+        ):
+            raise ValueError(
+                "going_concern_firm_value_samples must be finite and nonnegative"
+            )
+
     distress_adjusted = _distress_adjusted_firm_value(
-        base.going_concern_firm_value,
+        going_concern,
         base.liquidation_firm_value,
         probabilities,
     )
@@ -197,8 +216,16 @@ def _distress_adjusted_firm_value(
 ) -> NDArray[np.float64]: ...
 
 
+@overload
 def _distress_adjusted_firm_value(
-    going_concern_firm_value: float,
+    going_concern_firm_value: NDArray[np.float64],
+    liquidation_firm_value: float,
+    default_probability: NDArray[np.float64],
+) -> NDArray[np.float64]: ...
+
+
+def _distress_adjusted_firm_value(
+    going_concern_firm_value: float | NDArray[np.float64],
     liquidation_firm_value: float,
     default_probability: float | NDArray[np.float64],
 ) -> float | NDArray[np.float64]:
