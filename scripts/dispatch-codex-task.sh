@@ -9,6 +9,7 @@ RUNNER="$SCRIPT_DIR/run-codex-task.sh"
 issue=""
 branch=""
 prompt_file=""
+review_only=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -24,8 +25,12 @@ while [[ $# -gt 0 ]]; do
       prompt_file="${2:-}"
       shift 2
       ;;
+    --review-only)
+      review_only=1
+      shift
+      ;;
     *)
-      echo "Usage: $0 --issue <number> --branch <feat/N-slug> --prompt-file <path>" >&2
+      echo "Usage: $0 --issue <number> --branch <feat/N-slug> --prompt-file <path> [--review-only]" >&2
       exit 2
       ;;
   esac
@@ -42,7 +47,10 @@ if tmux has-session -t "$session" 2>/dev/null; then
   exit 1
 fi
 
-printf -v command '%q ' "$RUNNER" --issue "$issue" --branch "$branch" --prompt-file "$prompt_file"
+runner_args=("$RUNNER" --issue "$issue" --branch "$branch" --prompt-file "$prompt_file")
+if [[ "$review_only" -eq 1 ]]; then
+  runner_args+=(--review-only)
+fi
+printf -v command '%q ' "${runner_args[@]}"
 tmux new-session -d -s "$session" -c "$PROJECT_DIR" "$command"
 echo "[codex-dispatch] started $session for $branch"
-

@@ -25,8 +25,11 @@ LOG_DIR="$PROJECT_DIR/.auto-loop/logs"
 LOG_FILE="$LOG_DIR/auto-loop.log"
 LOCK_DIR="$PROJECT_DIR/.auto-loop/auto-loop.lock"
 STATUS_FILE="$PROJECT_DIR/.auto-loop/work-status.md"
+TASK_DIR="$PROJECT_DIR/.auto-loop/tasks"
+REVIEW_DISPATCHER="$SCRIPT_DIR/dispatch-codex-task.sh"
 CLAUDE_BIN="${CLAUDE_BIN:-$HOME/.local/bin/claude}"
 CODEX_BIN="${CODEX_BIN:-$(command -v codex 2>/dev/null || true)}"
+PYTHON_BIN="${PYTHON_BIN:-$(command -v python3 2>/dev/null || true)}"
 TIMEOUT_BIN="${TIMEOUT_BIN:-$(command -v timeout 2>/dev/null || command -v gtimeout 2>/dev/null || true)}"
 AUTO_LOOP_RUNNER="${AUTO_LOOP_RUNNER:-auto}" # auto | claude | codex
 AUTO_LOOP_AGENT_TIMEOUT_SECONDS="${AUTO_LOOP_AGENT_TIMEOUT_SECONDS:-900}"
@@ -53,6 +56,23 @@ state_value() {
 
 current_phase() {
   state_value "phase"
+}
+
+task_value() {
+  local task_file="$1"
+  local key="$2"
+  "$PYTHON_BIN" - "$task_file" "$key" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+try:
+    payload = json.loads(Path(sys.argv[1]).read_text())
+except (FileNotFoundError, json.JSONDecodeError):
+    raise SystemExit(1)
+value = payload.get(sys.argv[2], "")
+print(value if value is not None else "")
+PY
 }
 
 has_claude_session_limit() {
@@ -134,6 +154,36 @@ if [[ "$phase" == "awaiting_claude_review" ]]; then
   runner="claude"
   required_claude_review=1
   log "phase awaiting_claude_review: 조건부 Claude 리뷰 재시도"
+fi
+if [[ "$phase" == "implementing" && -x "$PYTHON_BIN" ]]; then
+  issue="$(state_value issue)"
+  branch="$(state_value branch)"
+  task_file="$TASK_DIR/issue-$issue.json"
+  task_status="$(task_value "$task_file" status 2>/dev/null || true)"
+  task_stage="$(task_value "$task_file" stage 2>/dev/null || true)"
+  if [[ "$task_status" == "retryable" ]]; then
+    prompt_file="$TASK_DIR/issue-$issue-prompt.md"
+    task_issue="$(task_value "$task_file" issue 2>/dev/null || true)"
+    task_branch="$(task_value "$task_file" branch 2>/dev/null || true)"
+    if [[ "$task_stage" != "review" || "$issue" != "$task_issue" || \
+          "$branch" != "$task_branch" || ! "$issue" =~ ^[0-9]+$ || \
+          ! "$branch" =~ ^feat/${issue}-[a-z0-9][a-z0-9-]*$ || \
+          ! -f "$prompt_file" || ! -x "$REVIEW_DISPATCHER" ]]; then
+      log "retryable review 상태값 불완전: issue=$issue branch=$branch stage=$task_stage"
+      exit 0
+    fi
+    if "$REVIEW_DISPATCHER" --issue "$issue" --branch "$branch" \
+        --prompt-file "$prompt_file" --review-only >>"$LOG_FILE" 2>&1; then
+      log "retryable review dispatch: #$issue $branch"
+    else
+      log "retryable review dispatch 실패: #$issue $branch; 다음 정각 재시도"
+    fi
+    exit 0
+  fi
+  if [[ "$task_status" =~ ^(running|failed|completed|escalated)$ ]]; then
+    log "phase implementing: task $task_status/$task_stage, coordinator LLM 호출 생략"
+    exit 0
+  fi
 fi
 if [[ -z "$TIMEOUT_BIN" || ! -x "$TIMEOUT_BIN" ]]; then
   log "timeout 바이너리 없음: 무제한 agent 실행을 거부하고 다음 tick에서 재시도"

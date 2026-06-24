@@ -107,6 +107,8 @@
 
 `.auto-loop/tasks/issue-<N>.json`만 확인한다.
 - `running`: 작업 중이므로 상태 변경 없이 종료.
+- `retryable` + stage `review`: 다음 정각 Shell router가 `--review-only`로 재실행한다.
+  구현을 반복하거나 실패 메시지를 보내지 않는다.
 - `failed`: 상태를 전진시키지 않고 로그 경로만 stdout에 기록.
 - `completed`: 정상적으로는 이미 `phase: awaiting_pr`이어야 한다. 아직 implementing이면
   상태 불일치로 보고 직접 리뷰하거나 Discord 메시지를 다시 보내지 않는다.
