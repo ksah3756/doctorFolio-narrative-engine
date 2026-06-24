@@ -27,7 +27,10 @@ LOCK_DIR="$PROJECT_DIR/.auto-loop/auto-loop.lock"
 STATUS_FILE="$PROJECT_DIR/.auto-loop/work-status.md"
 CLAUDE_BIN="${CLAUDE_BIN:-$HOME/.local/bin/claude}"
 CODEX_BIN="${CODEX_BIN:-$(command -v codex 2>/dev/null || true)}"
+TIMEOUT_BIN="${TIMEOUT_BIN:-$(command -v timeout 2>/dev/null || command -v gtimeout 2>/dev/null || true)}"
 AUTO_LOOP_RUNNER="${AUTO_LOOP_RUNNER:-auto}" # auto | claude | codex
+AUTO_LOOP_AGENT_TIMEOUT_SECONDS="${AUTO_LOOP_AGENT_TIMEOUT_SECONDS:-900}"
+AUTO_LOOP_AGENT_KILL_AFTER_SECONDS="${AUTO_LOOP_AGENT_KILL_AFTER_SECONDS:-30}"
 
 mkdir -p "$LOG_DIR"
 
@@ -56,10 +59,25 @@ has_claude_session_limit() {
   grep -qiE "session limit|usage limit|resets [0-9]+[ap]m|You've hit your session limit" "$1"
 }
 
+run_agent_with_timeout() {
+  "$TIMEOUT_BIN" \
+    --kill-after="${AUTO_LOOP_AGENT_KILL_AFTER_SECONDS}s" \
+    "${AUTO_LOOP_AGENT_TIMEOUT_SECONDS}s" \
+    "$@"
+}
+
+log_agent_timeout() {
+  local agent="$1"
+  local status="$2"
+  if [[ "$status" -eq 124 || "$status" -eq 137 ]]; then
+    log "agent timeout: $agent exceeded ${AUTO_LOOP_AGENT_TIMEOUT_SECONDS}s (exit $status); next tick will retry"
+  fi
+}
+
 run_claude() {
   local prompt
   prompt="$(cat "$CLAUDE_PROMPT_FILE")"
-  "$CLAUDE_BIN" \
+  run_agent_with_timeout "$CLAUDE_BIN" \
     --dangerously-skip-permissions \
     --mcp-config "$MCP_CONFIG" \
     -p "$prompt"
@@ -68,7 +86,7 @@ run_claude() {
 run_codex() {
   local prompt
   prompt="$(cat "$CODEX_PROMPT_FILE")"
-  "$CODEX_BIN" exec \
+  run_agent_with_timeout "$CODEX_BIN" exec \
     --dangerously-bypass-approvals-and-sandbox \
     --dangerously-bypass-hook-trust \
     --cd "$PROJECT_DIR" \
@@ -117,6 +135,10 @@ if [[ "$phase" == "awaiting_claude_review" ]]; then
   required_claude_review=1
   log "phase awaiting_claude_review: 조건부 Claude 리뷰 재시도"
 fi
+if [[ -z "$TIMEOUT_BIN" || ! -x "$TIMEOUT_BIN" ]]; then
+  log "timeout 바이너리 없음: 무제한 agent 실행을 거부하고 다음 tick에서 재시도"
+  exit 0
+fi
 
 log "===== auto-loop 발화 시작 (phase ${phase:-unknown}, runner $runner) ====="
 export MCP_TIMEOUT="${MCP_TIMEOUT:-60000}"
@@ -129,6 +151,7 @@ case "$runner" in
     run_claude >"$tmp_log" 2>&1
     status=$?
     cat "$tmp_log" >>"$LOG_FILE"
+    log_agent_timeout "claude" "$status"
     if [ "$status" -ne 0 ] && has_claude_session_limit "$tmp_log"; then
       if [ "$required_claude_review" -eq 1 ]; then
         log "필수 Claude 리뷰 세션 리미트: Codex fallback 금지, 다음 정각 재시도"
@@ -136,6 +159,7 @@ case "$runner" in
         log "Claude 세션 리미트 감지, Codex fallback 실행"
         run_codex >>"$LOG_FILE" 2>&1
         status=$?
+        log_agent_timeout "codex" "$status"
       else
         log "Codex 바이너리 없음: $CODEX_BIN"
       fi
@@ -146,6 +170,7 @@ case "$runner" in
     run_codex >"$tmp_log" 2>&1
     status=$?
     cat "$tmp_log" >>"$LOG_FILE"
+    log_agent_timeout "codex" "$status"
     ;;
   *)
     log "알 수 없는 AUTO_LOOP_RUNNER: $AUTO_LOOP_RUNNER"
