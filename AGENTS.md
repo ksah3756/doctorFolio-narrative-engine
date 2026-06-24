@@ -18,7 +18,8 @@ Before any task is "Done":
 ### Phase 1: Planning (Strict Separation)
 
 - Ambiguity Check: 모호하면 100% 정렬까지 질문.
-- Explicit Consent: 사용자 plan 승인 전 코딩 금지.
+- Explicit Consent: 수동 작업은 사용자 plan 승인 전 코딩 금지. 단, auto-loop는
+  `idle`에서 계획을 Discord에 알린 뒤 승인 대기 없이 구현으로 진행.
 - Test Strategy: plan에 작성할 테스트 케이스 명세 포함.
 
 ### Phase 2: Implementation (Strict TDD)
@@ -29,19 +30,33 @@ Before any task is "Done":
 4. **Commit:** 테스트와 구현은 TDD 사이클 반영하여 분리 커밋.
 5. **Verify:** `make verify` 통과 후 `git status` clean 확인. **작업은 반드시 커밋까지 끝낸다** — staged-only/미커밋으로 완료 보고 금지. (auto-loop dispatch는 `run-codex-task.sh`가 미커밋이면 completed를 차단한다.)
 
-| Role            | Owner  | Action                                   |
-| --------------- | ------ | ---------------------------------------- |
-| **Implementer** | Codex  | TDD → `make verify` → commit             |
-| **Reviewer**    | Codex  | Fresh read-only review → `REVIEW-N.md`   |
-| **Escalation Reviewer** | Claude | High-risk/P1/uncertain changes only |
-| **Git Manager** | Shell  | 승인 폴링 → PR 생성/머지                 |
+| Role | Owner | Action |
+| --- | --- | --- |
+| **State Router** | Shell | 상태별 실행 주체 선택; 대기 상태의 불필요한 LLM 호출 차단 |
+| **Planner** | Codex | `idle`에서 작업 선정·계획 알림 후 즉시 구현 dispatch |
+| **Implementer** | Codex (fresh session) | TDD → `make verify` → commit |
+| **Reviewer** | Codex (separate fresh session) | Read-only 독립 리뷰 → `REVIEW-<issue>-<cycle>.md` |
+| **Escalation Reviewer** | Claude | 수치 의미·provider·큰 아키텍처·P1·불확실성·반복 실패·명시 요청만 리뷰 |
+| **PR Gate** | Shell | 10분 승인 폴링 → PR 생성·머지 → `idle` 초기화 |
 
-### Auto-loop 명령어 (`ㄱㄱ` / `go`)
+### Auto-loop 핵심 프로세스
 
-Discord auto-loop에서 사용자의 `ㄱㄱ`(또는 `go`)는 **직전 봇 메시지의 게이트를 승인하고 다음 단계로 진행**하라는 뜻. 매번 Discord 기록을 뒤질 필요 없이 직전 메시지가 가리키는 단계를 실행하면 됨. 게이트는 둘:
+```text
+idle
+  → Codex 계획을 Discord에 알림(승인 대기 없음)
+  → issue/branch 생성 및 Codex 구현 dispatch
+  → 별도 Codex 세션 리뷰
+      ├─ 저위험 + P1 0: 리뷰 결과 알림 → awaiting_pr
+      └─ 조건부 escalation: awaiting_claude_review → 다음 loop에서 Claude 재시도
+  → awaiting_pr: Shell이 10분마다 현재 리뷰 메시지 이후의 정확한 ㄱㄱ/go만 확인
+  → PR 생성·머지 → idle
+```
 
-1. **`📋 다음 작업 제안` 직후** → 제안된 작업을 Codex에 위임 시작 (이슈 생성 → `feat/N-slug` 브랜치 → `scripts/dispatch-codex-task.sh`).
-2. **`✅ 리뷰 통과` 직후** → PR 생성 + 머지 (`gh pr create` → `gh pr merge`).
+- `awaiting_pr`에서는 LLM을 호출하지 않는다.
+- `ㄱㄱ`/`go`는 현재 리뷰의 PR 생성·머지 승인에만 사용한다. 과거 승인을 재사용하지
+  않도록 리뷰 메시지 ID, issue, branch, phase를 함께 검증한다.
+- 일반 Codex 리뷰 결과는 봇 mention 없이 전송하고, Claude mention은 조건부
+  escalation일 때만 사용한다.
 
 ## 3. Tech Stack
 
