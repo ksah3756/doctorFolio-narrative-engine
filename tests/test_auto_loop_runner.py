@@ -120,6 +120,7 @@ def _runner_env(tmp_path: Path, project_dir: Path) -> tuple[dict[str, str], Path
         "results = json.loads(sys.argv[1])\n"
         "Path(sys.argv[3]).write_text(json.dumps(results[int(sys.argv[2]) - 1]))\n"
         "PY\n"
+        '  printf "%s\\n" "${FAKE_REVIEW_OUTPUT:-}" >&2\n'
         '  exit "${FAKE_REVIEW_EXIT:-0}"\n'
         "fi\n"
         'printf "%s\\n" "$@" > "$FAKE_CODEX_ARGS"\n'
@@ -286,6 +287,145 @@ def test_direct_codex_runner_records_codex_failure_without_verifying(tmp_path: P
     assert status["status"] == "failed"
     assert status["exit_code"] == 7
     assert not (tmp_path / "review-count.txt").exists()
+
+
+def test_review_usage_limit_retries_review_only_without_failure_webhook(
+    tmp_path: Path,
+) -> None:
+    project_dir = tmp_path / "project"
+    project_dir.mkdir()
+    _init_repo(project_dir)
+    state_dir = project_dir / ".auto-loop"
+    state_dir.mkdir()
+    (state_dir / "work-status.md").write_text(
+        "---\n"
+        "phase: implementing\n"
+        "issue: 41\n"
+        "branch: feat/41-review-retry\n"
+        "review_cycle: 0\n"
+        "pr_approval_message_id: null\n"
+        "updated: 2026-06-25T00:00:00Z\n"
+        "---\n"
+    )
+    prompt_file = project_dir / "task.md"
+    prompt_file.write_text("Implement once, then retry only the independent review.\n")
+    env, _, _ = _runner_env(tmp_path, project_dir)
+    approved_review = {
+        "status": "APPROVED",
+        "summary": "재시도된 독립 리뷰가 통과했습니다.",
+        "risk_level": "LOW",
+        "claude_escalation": False,
+        "escalation_reasons": [],
+        "p1_findings": [],
+        "p2_findings": [],
+    }
+    env.update(
+        {
+            "AUTO_LOOP_DISABLE_DISCORD": "0",
+            "DISCORD_WEBHOOK_URL": "https://discord.invalid/webhook",
+            "FAKE_REVIEW_EXIT": "7",
+            "FAKE_REVIEW_OUTPUT": "ERROR: You've hit your usage limit. Try again at 1:48 AM.",
+            "FAKE_REVIEW_RESULTS": json.dumps([approved_review, approved_review]),
+        }
+    )
+    command = [
+        str(RUNNER),
+        "--issue",
+        "41",
+        "--branch",
+        "feat/41-review-retry",
+        "--prompt-file",
+        str(prompt_file),
+    ]
+
+    limited = subprocess.run(
+        command,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert limited.returncode == 0, limited.stderr
+    status_path = state_dir / "tasks/issue-41.json"
+    limited_status = json.loads(status_path.read_text())
+    assert limited_status["status"] == "retryable"
+    assert limited_status["stage"] == "review"
+    assert "finished_at" not in limited_status
+    assert (tmp_path / "implementation-count.txt").read_text().strip() == "1"
+    assert (tmp_path / "review-count.txt").read_text().strip() == "1"
+    assert not (tmp_path / "discord-payloads.jsonl").exists()
+
+    env["FAKE_REVIEW_EXIT"] = "0"
+    env["FAKE_REVIEW_OUTPUT"] = ""
+    retried = subprocess.run(
+        [*command, "--review-only"],
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert retried.returncode == 0, retried.stderr
+    assert (tmp_path / "implementation-count.txt").read_text().strip() == "1"
+    assert (tmp_path / "review-count.txt").read_text().strip() == "2"
+    retried_status = json.loads(status_path.read_text())
+    assert retried_status["status"] == "completed"
+    payloads = (tmp_path / "discord-payloads.jsonl").read_text().splitlines()
+    assert len(payloads) == 1
+    assert "재시도된 독립 리뷰가 통과했습니다." in json.loads(payloads[0])["content"]
+
+
+def test_non_transient_review_error_stays_failed_and_notifies(tmp_path: Path) -> None:
+    project_dir = tmp_path / "project"
+    project_dir.mkdir()
+    _init_repo(project_dir)
+    state_dir = project_dir / ".auto-loop"
+    state_dir.mkdir()
+    (state_dir / "work-status.md").write_text(
+        "---\n"
+        "phase: implementing\n"
+        "issue: 42\n"
+        "branch: feat/42-review-error\n"
+        "review_cycle: 0\n"
+        "pr_approval_message_id: null\n"
+        "updated: 2026-06-25T00:00:00Z\n"
+        "---\n"
+    )
+    prompt_file = project_dir / "task.md"
+    prompt_file.write_text("Keep deterministic review failures terminal.\n")
+    env, _, _ = _runner_env(tmp_path, project_dir)
+    env.update(
+        {
+            "AUTO_LOOP_DISABLE_DISCORD": "0",
+            "DISCORD_WEBHOOK_URL": "https://discord.invalid/webhook",
+            "FAKE_REVIEW_EXIT": "7",
+            "FAKE_REVIEW_OUTPUT": "invalid structured output schema",
+        }
+    )
+
+    result = subprocess.run(
+        [
+            str(RUNNER),
+            "--issue",
+            "42",
+            "--branch",
+            "feat/42-review-error",
+            "--prompt-file",
+            str(prompt_file),
+        ],
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 7
+    status = json.loads((state_dir / "tasks/issue-42.json").read_text())
+    assert status["status"] == "failed"
+    payloads = (tmp_path / "discord-payloads.jsonl").read_text().splitlines()
+    assert len(payloads) == 1
+    assert "Direct Codex task failed" in json.loads(payloads[0])["content"]
 
 
 def test_review_result_posts_without_mentions_and_arms_current_pr_gate(
@@ -648,6 +788,67 @@ def test_auto_loop_prompts_prioritize_the_latest_versioned_plan() -> None:
 def test_auto_loop_codex_fallback_uses_high_reasoning() -> None:
     script = (REPO_ROOT / "scripts" / "auto-loop.sh").read_text()
     assert 'model_reasoning_effort="high"' in script
+
+
+def test_scheduled_loop_dispatches_retryable_review_without_coordinator(
+    tmp_path: Path,
+) -> None:
+    project_dir, env, claude_called = _auto_loop_env(tmp_path, "implementing", [])
+    state_dir = project_dir / ".auto-loop"
+    task_dir = state_dir / "tasks"
+    task_dir.mkdir()
+    (state_dir / "work-status.md").write_text(
+        "---\n"
+        "phase: implementing\n"
+        "issue: 43\n"
+        "branch: feat/43-review-retry\n"
+        "updated: 2026-06-25T00:00:00Z\n"
+        "---\n"
+    )
+    (task_dir / "issue-43.json").write_text(
+        json.dumps(
+            {
+                "issue": 43,
+                "branch": "feat/43-review-retry",
+                "status": "retryable",
+                "stage": "review",
+                "exit_code": 7,
+            }
+        )
+    )
+    prompt_file = task_dir / "issue-43-prompt.md"
+    prompt_file.write_text("Retry only the independent review.\n")
+    dispatch_args = tmp_path / "review-dispatch-args.txt"
+    _write_executable(
+        project_dir / "scripts/dispatch-codex-task.sh",
+        "#!/bin/sh\n"
+        'printf "%s\\n" "$@" > "$FAKE_REVIEW_DISPATCH_ARGS"\n',
+    )
+    env["FAKE_REVIEW_DISPATCH_ARGS"] = str(dispatch_args)
+
+    result = subprocess.run(
+        [str(project_dir / "scripts/auto-loop.sh")],
+        cwd=project_dir,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert dispatch_args.read_text().splitlines() == [
+        "--issue",
+        "43",
+        "--branch",
+        "feat/43-review-retry",
+        "--prompt-file",
+        str(prompt_file),
+        "--review-only",
+    ]
+    assert not claude_called.exists()
+    assert not (tmp_path / "codex-called").exists()
+    log = (state_dir / "logs/auto-loop.log").read_text()
+    assert "retryable review dispatch" in log
 
 
 def test_awaiting_pr_always_defers_to_shell_poller(tmp_path: Path) -> None:
