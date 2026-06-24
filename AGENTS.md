@@ -47,6 +47,7 @@ idle
   → issue/branch 생성 및 Codex 구현 dispatch
   → 별도 Codex 세션 리뷰
       ├─ 저위험 + P1 0: 리뷰 결과 알림 → awaiting_pr
+      ├─ usage/session limit: retryable → 다음 loop에서 Shell이 리뷰만 재실행
       └─ 조건부 escalation: awaiting_claude_review → 다음 loop에서 Claude 재시도
   → awaiting_pr: Shell이 10분마다 현재 리뷰 메시지 이후의 정확한 ㄱㄱ/go만 확인
   → PR 생성·머지 → idle

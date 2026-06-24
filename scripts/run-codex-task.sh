@@ -3,7 +3,7 @@
 set -uo pipefail
 
 usage() {
-  echo "Usage: $0 --issue <number> --branch <feat/N-slug> --prompt-file <path>" >&2
+  echo "Usage: $0 --issue <number> --branch <feat/N-slug> --prompt-file <path> [--review-only]" >&2
 }
 
 die() {
@@ -14,6 +14,7 @@ die() {
 issue=""
 branch=""
 prompt_file=""
+review_only=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -28,6 +29,10 @@ while [[ $# -gt 0 ]]; do
     --prompt-file)
       prompt_file="${2:-}"
       shift 2
+      ;;
+    --review-only)
+      review_only=1
+      shift
       ;;
     -h|--help)
       usage
@@ -97,6 +102,8 @@ payload.update(
 payload.setdefault("started_at", now)
 if payload["status"] in {"completed", "failed"}:
     payload["finished_at"] = now
+else:
+    payload.pop("finished_at", None)
 
 temporary = path.with_suffix(".tmp")
 temporary.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
@@ -139,6 +146,26 @@ print(json.dumps({"content": sys.argv[1]}))
 PY
 )"
   curl -sS -X POST "$webhook_url" -H "Content-Type: application/json" -d "$payload" >/dev/null || true
+}
+
+has_transient_agent_limit() {
+  grep -qiE "usage limit|session limit|try again at|resets [0-9]+[ap]m" "$1"
+}
+
+task_value() {
+  local key="$1"
+  python3 - "$STATUS_FILE" "$key" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+try:
+    payload = json.loads(Path(sys.argv[1]).read_text())
+except (FileNotFoundError, json.JSONDecodeError):
+    raise SystemExit(1)
+value = payload.get(sys.argv[2], "")
+print(value if value is not None else "")
+PY
 }
 
 state_value() {
@@ -360,14 +387,18 @@ if [[ "$current_branch" != "$branch" ]]; then
   fi
 fi
 
-: > "$EVENT_LOG"
-
 # workspace-write 샌드박스는 기본적으로 `!**/.git/**`로 .git을 read-only로 막아
 # Codex 커밋이 EPERM으로 실패한다(#9·#11·#14 재발). 프로젝트 .git을 명시적으로
 # writable_roots에 넣어 이 배제를 무력화하고 TDD 커밋(Red/Green 분리)을 허용한다.
 git_writable_root="sandbox_workspace_write.writable_roots=[\"$PROJECT_DIR/.git\"]"
 
-run_implementation "$prompt_file" || exit $?
+if [[ "$review_only" -eq 1 ]]; then
+  [[ "$(task_value status)" == "retryable" && "$(task_value stage)" == "review" ]] || \
+    die "--review-only requires retryable review status"
+else
+  : > "$EVENT_LOG"
+  run_implementation "$prompt_file" || exit $?
+fi
 
 if [[ "${AUTO_LOOP_DISABLE_DISCORD:-0}" != "1" && ! -f "$STATE_FILE" ]]; then
   write_status "failed" 1 "review_state"
@@ -394,6 +425,7 @@ fix_prompt="$TASK_DIR/issue-$issue-review-$review_cycle-fix.md"
 write_review_prompt "$review_cycle" "$review_prompt"
 write_status "running" 0 "review"
 
+review_attempt_log="$(mktemp "$LOG_DIR/codex-review-issue-$issue-attempt.XXXXXX")"
 "$CODEX_BIN" --ask-for-approval never exec \
   --cd "$PROJECT_DIR" \
   --sandbox read-only \
@@ -401,13 +433,22 @@ write_status "running" 0 "review"
   -c 'model_reasoning_effort="high"' \
   --output-schema "$REVIEW_SCHEMA" \
   --output-last-message "$review_json" \
-  - < "$review_prompt" >> "$EVENT_LOG" 2>&1
+  - < "$review_prompt" > "$review_attempt_log" 2>&1
 review_status=$?
+cat "$review_attempt_log" >> "$EVENT_LOG"
 if [[ "$review_status" -ne 0 ]]; then
+  if has_transient_agent_limit "$review_attempt_log"; then
+    write_status "retryable" "$review_status" "review"
+    rm -f "$review_attempt_log"
+    echo "[codex-task] issue #$issue review deferred by usage limit; next scheduled loop will retry"
+    exit 0
+  fi
+  rm -f "$review_attempt_log"
   write_status "failed" "$review_status" "review"
   notify_failure
   exit "$review_status"
 fi
+rm -f "$review_attempt_log"
 
 p1_count="$(format_review "$review_cycle" "$review_json" "$review_report" "$discord_message" "$fix_prompt")" || {
   write_status "failed" 1 "review"
