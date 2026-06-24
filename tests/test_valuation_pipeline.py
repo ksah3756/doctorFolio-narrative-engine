@@ -36,6 +36,62 @@ def test_equity_samples_do_not_increase_with_default_probability() -> None:
     assert np.all(np.diff(values) <= 0.0)
 
 
+def test_operating_loss_samples_flow_through_bridge_with_shape_preserved() -> None:
+    margins = np.array([-0.10, -0.15, -0.20], dtype=np.float64)
+    assumption_samples = _constant_assumption_samples(margins.shape)
+    assumption_samples["OPERATING_MARGIN"] = margins
+    going_concern = going_concern_value_samples(
+        initial_revenue=100.0,
+        assumption_samples=assumption_samples,
+        forecast_years=3,
+    )
+
+    values = equity_value_samples(
+        _bridge_inputs(liquidation_firm_value=20.0),
+        np.full(margins.shape, 0.05, dtype=np.float64),
+        going_concern_firm_value_samples=going_concern,
+    )
+
+    assert np.all(going_concern < 0.0)
+    assert values.shape == margins.shape
+    assert np.all(np.isfinite(values))
+
+
+def test_operating_losses_move_toward_liquidation_as_default_risk_rises() -> None:
+    probabilities = np.linspace(0.0, 1.0, num=11, dtype=np.float64)
+    assumption_samples = _constant_assumption_samples(probabilities.shape)
+    assumption_samples["OPERATING_MARGIN"] = np.full(
+        probabilities.shape,
+        -0.10,
+        dtype=np.float64,
+    )
+    going_concern = going_concern_value_samples(
+        initial_revenue=100.0,
+        assumption_samples=assumption_samples,
+        forecast_years=3,
+    )
+    base = _bridge_inputs(liquidation_firm_value=20.0)
+
+    values = equity_value_samples(
+        base,
+        probabilities,
+        going_concern_firm_value_samples=going_concern,
+    )
+    liquidation_equity_value = (
+        base.liquidation_firm_value
+        - base.interest_bearing_debt
+        - base.lease_liability
+        - base.minority_interest
+        + base.cash_and_non_operating_assets
+        - base.option_value
+    )
+
+    assert np.all(going_concern < base.liquidation_firm_value)
+    assert np.all(np.diff(values) >= 0.0)
+    assert np.all(np.diff(np.abs(values - liquidation_equity_value)) <= 0.0)
+    assert values[-1] == liquidation_equity_value
+
+
 def _run_pipeline(*, seed: int) -> np.ndarray:
     result = mc_run(
         factor_states={},
