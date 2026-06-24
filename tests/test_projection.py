@@ -51,7 +51,7 @@ def test_constant_assumption_path_matches_hand_calculated_fcff_and_value() -> No
 @pytest.mark.parametrize("invalid", [np.nan, np.inf, -np.inf])
 def test_projection_rejects_non_finite_inputs(field: str, invalid: float) -> None:
     with pytest.raises(ValueError, match=field):
-        replace(_base_inputs(), **{field: invalid})
+        _replace_float_field(_base_inputs(), field, invalid)
 
 
 @pytest.mark.parametrize(
@@ -107,6 +107,28 @@ def _base_inputs() -> ProjectionInputs:
         terminal_growth=0.02,
         forecast_years=2,
     )
+
+
+def _replace_float_field(
+    inputs: ProjectionInputs,
+    field: str,
+    value: float,
+) -> ProjectionInputs:
+    if field == "initial_revenue":
+        return replace(inputs, initial_revenue=value)
+    if field == "revenue_growth":
+        return replace(inputs, revenue_growth=value)
+    if field == "operating_margin":
+        return replace(inputs, operating_margin=value)
+    if field == "tax_rate":
+        return replace(inputs, tax_rate=value)
+    if field == "sales_to_capital_ratio":
+        return replace(inputs, sales_to_capital_ratio=value)
+    if field == "wacc":
+        return replace(inputs, wacc=value)
+    if field == "terminal_growth":
+        return replace(inputs, terminal_growth=value)
+    raise AssertionError(f"unknown projection field: {field}")
 
 
 def _seeded_assumption_samples(seed: int) -> dict[str, np.ndarray]:
