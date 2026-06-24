@@ -2,52 +2,29 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from math import isfinite
-from typing import Final, Literal, cast, overload
+from typing import Final, overload
 
 import numpy as np
 from numpy.typing import NDArray
 
-from dcf_engine.claim import (
-    CapitalStructureInstrument,
-    Claim,
-    ClaimDirection,
-    MagnitudeQualifier,
+from dcf_engine.capital_structure import (
+    INSTRUMENT_TO_BRIDGE,
+    apply_capital_structure_claims,
 )
 
-type BridgeComponent = Literal[
-    "interest_bearing_debt",
-    "lease_liability",
-    "option_value",
-    "minority_interest",
+__all__ = [
+    "BridgeInputs",
+    "INSTRUMENT_TO_BRIDGE",
+    "apply_capital_structure_claims",
+    "equity_value",
+    "equity_value_samples",
 ]
 
-INSTRUMENT_TO_BRIDGE: Final[dict[CapitalStructureInstrument, BridgeComponent]] = {
-    "corporate_bond": "interest_bearing_debt",
-    "bank_loan": "interest_bearing_debt",
-    "lease": "lease_liability",
-    "stock_option": "option_value",
-    "minority_stake": "minority_interest",
-}
-SHARE_COUNT_INSTRUMENTS: Final[frozenset[CapitalStructureInstrument]] = frozenset(
-    {"equity_issuance", "treasury_stock"}
-)
-MAGNITUDE_TO_BRIDGE_PERCENT: Final[dict[MagnitudeQualifier, float]] = {
-    "WEAK": 0.05,
-    "MODERATE": 0.10,
-    "STRONG": 0.20,
-    "EXTREME": 0.40,
-}
-DIRECTION_TO_BRIDGE_SIGN: Final[dict[ClaimDirection, float]] = {
-    "INCREASE": 1.0,
-    "DECREASE": -1.0,
-    "NEUTRAL": 0.0,
-}
 MIN_BRIDGE_VALUE: Final = 0.0
 MIN_DEFAULT_PROBABILITY: Final = 0.0
 MAX_DEFAULT_PROBABILITY: Final = 1.0
-UNCHANGED_COMPONENT_MULTIPLIER: Final = 1.0
 
 
 @dataclass(frozen=True)
@@ -62,8 +39,9 @@ class BridgeInputs:
     option_value: float
 
     def __post_init__(self) -> None:
+        if not isfinite(self.going_concern_firm_value):
+            raise ValueError("going_concern_firm_value must be finite")
         nonnegative_values = {
-            "going_concern_firm_value": self.going_concern_firm_value,
             "liquidation_firm_value": self.liquidation_firm_value,
             "interest_bearing_debt": self.interest_bearing_debt,
             "lease_liability": self.lease_liability,
@@ -80,55 +58,6 @@ class BridgeInputs:
             <= MAX_DEFAULT_PROBABILITY
         ):
             raise ValueError("default_probability must be finite and between 0 and 1")
-
-
-def apply_capital_structure_claims(base: BridgeInputs, claims: list[Claim]) -> BridgeInputs:
-    component_percent_changes: dict[BridgeComponent, float] = {
-        "interest_bearing_debt": 0.0,
-        "lease_liability": 0.0,
-        "option_value": 0.0,
-        "minority_interest": 0.0,
-    }
-    for claim in claims:
-        if claim.claim_subject != "CAPITAL_STRUCTURE":
-            continue
-        instrument = cast(CapitalStructureInstrument, claim.instrument_type)
-        if instrument in SHARE_COUNT_INSTRUMENTS:
-            # 주식 수 instrument는 후속 per-share 단계 책임이므로 bridge value를 건드리지 않는다.
-            continue
-        component = INSTRUMENT_TO_BRIDGE[instrument]
-        component_percent_changes[component] += (
-            DIRECTION_TO_BRIDGE_SIGN[claim.direction]
-            * MAGNITUDE_TO_BRIDGE_PERCENT[claim.magnitude_qualifier]
-        )
-
-    # 원본 component 기준 변화율을 합산해 claim 순서와 무관하게 결정론적으로 갱신한다.
-    return replace(
-        base,
-        interest_bearing_debt=_apply_percent_change(
-            base.interest_bearing_debt,
-            component_percent_changes["interest_bearing_debt"],
-        ),
-        lease_liability=_apply_percent_change(
-            base.lease_liability,
-            component_percent_changes["lease_liability"],
-        ),
-        option_value=_apply_percent_change(
-            base.option_value,
-            component_percent_changes["option_value"],
-        ),
-        minority_interest=_apply_percent_change(
-            base.minority_interest,
-            component_percent_changes["minority_interest"],
-        ),
-    )
-
-
-def _apply_percent_change(value: float, percent_change: float) -> float:
-    return max(
-        value * (UNCHANGED_COMPONENT_MULTIPLIER + percent_change),
-        MIN_BRIDGE_VALUE,
-    )
 
 
 def equity_value(inputs: BridgeInputs) -> float:
@@ -153,6 +82,8 @@ def equity_value(inputs: BridgeInputs) -> float:
 def equity_value_samples(
     base: BridgeInputs,
     default_probability_samples: NDArray[np.float64],
+    *,
+    going_concern_firm_value_samples: NDArray[np.float64] | None = None,
 ) -> NDArray[np.float64]:
     probabilities = np.asarray(default_probability_samples, dtype=np.float64)
     if not np.all(np.isfinite(probabilities)) or np.any(
@@ -163,8 +94,21 @@ def equity_value_samples(
             "default_probability_samples must be finite and between 0 and 1"
         )
 
+    going_concern: float | NDArray[np.float64] = base.going_concern_firm_value
+    if going_concern_firm_value_samples is not None:
+        going_concern = np.asarray(
+            going_concern_firm_value_samples,
+            dtype=np.float64,
+        )
+        if going_concern.shape != probabilities.shape:
+            raise ValueError(
+                "going_concern_firm_value_samples must match probability sample shape"
+            )
+        if not np.all(np.isfinite(going_concern)):
+            raise ValueError("going_concern_firm_value_samples must be finite")
+
     distress_adjusted = _distress_adjusted_firm_value(
-        base.going_concern_firm_value,
+        going_concern,
         base.liquidation_firm_value,
         probabilities,
     )
@@ -197,8 +141,16 @@ def _distress_adjusted_firm_value(
 ) -> NDArray[np.float64]: ...
 
 
+@overload
 def _distress_adjusted_firm_value(
-    going_concern_firm_value: float,
+    going_concern_firm_value: NDArray[np.float64],
+    liquidation_firm_value: float,
+    default_probability: NDArray[np.float64],
+) -> NDArray[np.float64]: ...
+
+
+def _distress_adjusted_firm_value(
+    going_concern_firm_value: float | NDArray[np.float64],
     liquidation_firm_value: float,
     default_probability: float | NDArray[np.float64],
 ) -> float | NDArray[np.float64]:
