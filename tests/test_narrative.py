@@ -1,8 +1,9 @@
 import numpy as np
 import pytest
 
-from dcf_engine.assumption import AssumptionState, ScaleSpec
+from dcf_engine.assumption import AssumptionState, ReinvestmentTool, ScaleSpec
 from dcf_engine.distributions import DistributionFamily
+from dcf_engine.lifecycle import LifecycleStage
 from dcf_engine.narrative import (
     DEFAULT_NARRATIVE_ID,
     Narrative,
@@ -32,8 +33,8 @@ def test_default_single_narrative_container_has_stable_id_and_owned_state() -> N
     ],
 )
 def test_narrative_derives_reinvestment_tool_from_lifecycle_stage(
-    stage: str,
-    tool: str,
+    stage: LifecycleStage,
+    tool: ReinvestmentTool,
 ) -> None:
     narrative = Narrative.default(lifecycle_stage=stage)
 
