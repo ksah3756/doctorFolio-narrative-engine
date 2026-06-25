@@ -141,6 +141,58 @@ def test_scenario_value_maps_reject_mismatched_narrative_ids(
         scenario_set.probability_weighted_value(values_by_narrative)
 
 
+@pytest.mark.parametrize(
+    ("base_stage", "peer_id", "peer_stage", "base_tam", "peer_tam"),
+    [
+        ("growth", "mature", "mature", {}, {}),
+        ("growth", "supplier", "growth", {"market": "platform"}, {"market": "supplier"}),
+    ],
+)
+def test_scenario_set_rejects_type_2_measurement_axis_mixing(
+    base_stage: LifecycleStage,
+    peer_id: str,
+    peer_stage: LifecycleStage,
+    base_tam: dict[str, object],
+    peer_tam: dict[str, object],
+) -> None:
+    with pytest.raises(ValueError, match="measurement axis"):
+        NarrativeScenarioSet.from_containers(
+            containers=[
+                _container(
+                    "base",
+                    _valuation_assumptions(),
+                    lifecycle_stage=base_stage,
+                    tam_structure=base_tam,
+                ),
+                _container(
+                    peer_id,
+                    _valuation_assumptions(),
+                    lifecycle_stage=peer_stage,
+                    tam_structure=peer_tam,
+                ),
+            ],
+            probabilities_by_narrative={"base": 0.50, peer_id: 0.50},
+        )
+
+
+def test_probability_weighted_value_rejects_non_scalar_shape_mismatch() -> None:
+    scenario_set = NarrativeScenarioSet.from_containers(
+        containers=[
+            _container("base", _valuation_assumptions()),
+            _container("bull", _valuation_assumptions()),
+        ],
+        probabilities_by_narrative={"base": 0.50, "bull": 0.50},
+    )
+
+    with pytest.raises(ValueError, match="shape"):
+        scenario_set.probability_weighted_value(
+            {
+                "base": np.array([100.0, 110.0], dtype=np.float64),
+                "bull": np.array([[120.0], [130.0]], dtype=np.float64),
+            }
+        )
+
+
 def test_bull_base_bear_scenario_set_returns_probability_weighted_value() -> None:
     scenario_set = NarrativeScenarioSet.from_containers(
         containers=[
@@ -189,9 +241,16 @@ def _valuation_assumptions() -> list[AssumptionState]:
 def _container(
     narrative_id: str,
     assumptions: list[AssumptionState],
+    *,
+    lifecycle_stage: LifecycleStage = "growth",
+    tam_structure: dict[str, object] | None = None,
 ) -> NarrativeContainer:
     return NarrativeContainer.single(
-        narrative=Narrative.default(narrative_id=narrative_id),
+        narrative=Narrative.default(
+            narrative_id=narrative_id,
+            lifecycle_stage=lifecycle_stage,
+            tam_structure=tam_structure,
+        ),
         assumptions=assumptions,
     )
 
