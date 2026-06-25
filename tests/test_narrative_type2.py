@@ -7,7 +7,6 @@ from dcf_engine.narrative_type2 import (
     validate_type2_candidate_claim_ids,
 )
 
-
 VALID_CLAIM_IDS = {"claim-1", "claim-2", "claim-3"}
 
 
