@@ -125,6 +125,7 @@ class NarrativeScenarioSet:
         for narrative_id, container in self.containers_by_narrative.items():
             if container.narrative.narrative_id != narrative_id:
                 raise ValueError("containers_by_narrative keys must match container narrative ids")
+        self._validate_measurement_axis()
         self._validate_probabilities()
 
     @classmethod
@@ -165,6 +166,7 @@ class NarrativeScenarioSet:
         values_by_narrative: Mapping[str, ScenarioValue],
     ) -> ScenarioValue:
         self._validate_value_ids(values_by_narrative)
+        self._validate_value_shapes(values_by_narrative)
         weighted_value: NDArray[np.float64] | None = None
         scalar_only = True
         # valuation 출력의 shape를 보존하려고 첫 값 기준 누적 배열을 만든다.
@@ -196,9 +198,38 @@ class NarrativeScenarioSet:
         ):
             raise ValueError("probabilities must sum to 1.0")
 
+    def _validate_measurement_axis(self) -> None:
+        first_container = next(iter(self.containers_by_narrative.values()))
+        lifecycle_stage = first_container.narrative.lifecycle_stage
+        tam_structure = first_container.narrative.tam_structure
+        # Type-1만 확률가중할 수 있으므로 구조 축이 달라지는 Type-2 혼합은 여기서 차단한다.
+        for container in self.containers_by_narrative.values():
+            narrative = container.narrative
+            if (
+                narrative.lifecycle_stage != lifecycle_stage
+                or narrative.tam_structure != tam_structure
+            ):
+                raise ValueError(
+                    "scenarios must share one measurement axis "
+                    "(same lifecycle_stage and tam_structure); "
+                    "probability-weighted mixing across axes is a category error"
+                )
+
     def _validate_value_ids(self, values_by_narrative: Mapping[str, ScenarioValue]) -> None:
         if set(values_by_narrative) != set(self.containers_by_narrative):
             raise ValueError("values_by_narrative must match scenario narrative ids")
+
+    def _validate_value_shapes(self, values_by_narrative: Mapping[str, ScenarioValue]) -> None:
+        non_scalar_shape: tuple[int, ...] | None = None
+        for value in values_by_narrative.values():
+            value_array = np.asarray(value, dtype=np.float64)
+            if value_array.ndim == 0:
+                continue
+            if non_scalar_shape is None:
+                non_scalar_shape = value_array.shape
+                continue
+            if value_array.shape != non_scalar_shape:
+                raise ValueError("non-scalar scenario values must share the same shape")
 
 
 def build_claim_activation_mask(
