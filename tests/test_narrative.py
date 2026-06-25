@@ -8,6 +8,7 @@ from dcf_engine.narrative import (
     DEFAULT_NARRATIVE_ID,
     Narrative,
     NarrativeContainer,
+    NarrativeScenarioSet,
     build_claim_activation_mask,
     create_narrative,
 )
@@ -93,6 +94,139 @@ def test_narrative_container_wraps_current_dcf_path_without_changing_behavior() 
     np.testing.assert_array_equal(wrapped_value, direct_value)
 
 
+@pytest.mark.parametrize(
+    "probabilities_by_narrative",
+    [
+        {"base": -0.1, "bull": 1.1},
+        {"base": float("nan"), "bull": 1.0},
+        {"base": float("inf"), "bull": 0.0},
+        {"base": 0.3, "bull": 0.6},
+    ],
+)
+def test_scenario_set_rejects_invalid_probabilities(
+    probabilities_by_narrative: dict[str, float],
+) -> None:
+    containers = [
+        _container("base", _valuation_assumptions()),
+        _container("bull", _valuation_assumptions()),
+    ]
+
+    with pytest.raises(ValueError, match="probabilities"):
+        NarrativeScenarioSet.from_containers(
+            containers=containers,
+            probabilities_by_narrative=probabilities_by_narrative,
+        )
+
+
+@pytest.mark.parametrize(
+    "values_by_narrative",
+    [
+        {"base": 100.0},
+        {"base": 100.0, "bull": 140.0, "bear": 70.0},
+        {"base": 100.0, "bear": 70.0},
+    ],
+)
+def test_scenario_value_maps_reject_mismatched_narrative_ids(
+    values_by_narrative: dict[str, float],
+) -> None:
+    scenario_set = NarrativeScenarioSet.from_containers(
+        containers=[
+            _container("base", _valuation_assumptions()),
+            _container("bull", _valuation_assumptions()),
+        ],
+        probabilities_by_narrative={"base": 0.75, "bull": 0.25},
+    )
+
+    with pytest.raises(ValueError, match="values_by_narrative"):
+        scenario_set.probability_weighted_value(values_by_narrative)
+
+
+@pytest.mark.parametrize(
+    ("base_stage", "peer_id", "peer_stage", "base_tam", "peer_tam"),
+    [
+        ("growth", "mature", "mature", {}, {}),
+        ("growth", "supplier", "growth", {"market": "platform"}, {"market": "supplier"}),
+    ],
+)
+def test_scenario_set_rejects_type_2_measurement_axis_mixing(
+    base_stage: LifecycleStage,
+    peer_id: str,
+    peer_stage: LifecycleStage,
+    base_tam: dict[str, object],
+    peer_tam: dict[str, object],
+) -> None:
+    with pytest.raises(ValueError, match="measurement axis"):
+        NarrativeScenarioSet.from_containers(
+            containers=[
+                _container(
+                    "base",
+                    _valuation_assumptions(),
+                    lifecycle_stage=base_stage,
+                    tam_structure=base_tam,
+                ),
+                _container(
+                    peer_id,
+                    _valuation_assumptions(),
+                    lifecycle_stage=peer_stage,
+                    tam_structure=peer_tam,
+                ),
+            ],
+            probabilities_by_narrative={"base": 0.50, peer_id: 0.50},
+        )
+
+
+def test_probability_weighted_value_rejects_non_scalar_shape_mismatch() -> None:
+    scenario_set = NarrativeScenarioSet.from_containers(
+        containers=[
+            _container("base", _valuation_assumptions()),
+            _container("bull", _valuation_assumptions()),
+        ],
+        probabilities_by_narrative={"base": 0.50, "bull": 0.50},
+    )
+
+    with pytest.raises(ValueError, match="shape"):
+        scenario_set.probability_weighted_value(
+            {
+                "base": np.array([100.0, 110.0], dtype=np.float64),
+                "bull": np.array([[120.0], [130.0]], dtype=np.float64),
+            }
+        )
+
+
+def test_bull_base_bear_scenario_set_returns_probability_weighted_value() -> None:
+    scenario_set = NarrativeScenarioSet.from_containers(
+        containers=[
+            _container("bear", _valuation_assumptions()),
+            _container("base", _valuation_assumptions()),
+            _container("bull", _valuation_assumptions()),
+        ],
+        probabilities_by_narrative={"bear": 0.20, "base": 0.50, "bull": 0.30},
+    )
+
+    weighted_value = scenario_set.probability_weighted_value(
+        {"bear": 70.0, "base": 100.0, "bull": 150.0}
+    )
+
+    assert weighted_value == pytest.approx(109.0)
+
+
+def test_single_container_scenario_set_matches_existing_base_path() -> None:
+    assumptions = _valuation_assumptions()
+    container = NarrativeContainer.single(assumptions=assumptions)
+    direct_value = going_concern_value_samples(
+        initial_revenue=100.0,
+        assumption_samples=_constant_samples(assumptions),
+        forecast_years=3,
+    )
+
+    scenario_set = NarrativeScenarioSet.single(container)
+    weighted_value = scenario_set.probability_weighted_value(
+        {container.narrative.narrative_id: direct_value}
+    )
+
+    np.testing.assert_array_equal(weighted_value, direct_value)
+
+
 def _valuation_assumptions() -> list[AssumptionState]:
     return [
         _assumption("REVENUE_CAGR", 0.08, 0.01, "normal"),
@@ -102,6 +236,23 @@ def _valuation_assumptions() -> list[AssumptionState]:
         _assumption("WACC", 0.10, 0.002, "normal"),
         _assumption("TERMINAL_GROWTH", 0.02, 0.001, "normal"),
     ]
+
+
+def _container(
+    narrative_id: str,
+    assumptions: list[AssumptionState],
+    *,
+    lifecycle_stage: LifecycleStage = "growth",
+    tam_structure: dict[str, object] | None = None,
+) -> NarrativeContainer:
+    return NarrativeContainer.single(
+        narrative=Narrative.default(
+            narrative_id=narrative_id,
+            lifecycle_stage=lifecycle_stage,
+            tam_structure=tam_structure,
+        ),
+        assumptions=assumptions,
+    )
 
 
 def _constant_samples(assumptions: list[AssumptionState]) -> dict[str, np.ndarray]:
