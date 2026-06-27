@@ -80,6 +80,16 @@ def test_type2_candidate_rejects_probability_or_blending_fields(
         Type2NarrativeCandidate.model_validate(payload)
 
 
+def test_type2_candidate_rejects_claim_ids_with_conflicting_evidence_roles() -> None:
+    payload = _candidate_payload() | {
+        "supporting_claim_ids": ["claim-1", "claim-2"],
+        "contradicting_claim_ids": ["claim-2", "claim-3"],
+    }
+
+    with pytest.raises(ValidationError, match="same Type-2 candidate"):
+        Type2NarrativeCandidate.model_validate(payload)
+
+
 def test_type2_candidate_validates_evidence_claim_ids_against_shared_pool() -> None:
     candidate = Type2NarrativeCandidate.model_validate(
         _candidate_payload()
@@ -106,7 +116,9 @@ def test_type2_candidate_prompt_has_stable_ordering_and_boundary_instructions() 
     claim_1_index = prompt.index("- claim-1: Export controls remain a risk.")
     claim_2_index = prompt.index("- claim-2: Data center demand expanded.")
     assert claim_1_index < claim_2_index
+    assert "Identify lifecycle/TAM structural fissure evidence from the shared claim pool." in prompt
     assert "Do not assign probabilities, weights, expected values, or blended valuations." in prompt
     assert "Do not perform valuation calculations." in prompt
     assert "Human selection happens later; propose candidates only." in prompt
+    assert "Do not select a winner or merge candidates into one scenario." in prompt
     assert "Return JSON only" in prompt
