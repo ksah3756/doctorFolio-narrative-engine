@@ -151,6 +151,12 @@ if [[ "$phase" == "awaiting_pr" ]]; then
   exit 0
 fi
 if [[ "$phase" == "awaiting_claude_review" ]]; then
+  review_status="$(state_value status)"
+  review_cycle="$(state_value review_cycle)"
+  if [[ "$review_status" =~ ^(HOLD|NEEDS_REVISION)$ && "$review_cycle" =~ ^[0-9]+$ ]]; then
+    log "same-cycle Claude verdict $review_status for review_cycle $review_cycle: newer Codex output 대기"
+    exit 0
+  fi
   runner="claude"
   required_claude_review=1
   log "phase awaiting_claude_review: 조건부 Claude 리뷰 재시도"
