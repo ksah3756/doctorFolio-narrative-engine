@@ -1,0 +1,137 @@
+"""Type-2 narrative candidate proposal surface."""
+
+from __future__ import annotations
+
+from collections.abc import Iterable, Mapping
+from typing import Final
+
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator
+
+from dcf_engine.lifecycle import LifecycleStage
+
+FORBIDDEN_TYPE2_OUTPUT_FIELDS: Final[tuple[str, ...]] = (
+    "probability",
+    "weight",
+    "expected_value",
+    "weighted_value",
+    "blended_valuation",
+)
+PROMPT_LIFECYCLE_STAGES: Final = "young, growth, mature, decline"
+
+
+class Type2NarrativeCandidate(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    candidate_id: str
+    thesis: str
+    short_description: str
+    lifecycle_stage: LifecycleStage
+    tam_structure: dict[str, object]
+    supporting_claim_ids: tuple[str, ...]
+    contradicting_claim_ids: tuple[str, ...]
+
+    @field_validator("candidate_id", "thesis", "short_description")
+    @classmethod
+    def require_non_empty_text(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("text fields must be non-empty")
+        return cleaned
+
+    @field_validator("tam_structure")
+    @classmethod
+    def require_structural_tam(cls, value: dict[str, object]) -> dict[str, object]:
+        if not value:
+            raise ValueError("tam_structure must be non-empty")
+        return dict(value)
+
+    @field_validator("supporting_claim_ids", "contradicting_claim_ids")
+    @classmethod
+    def require_valid_claim_id_values(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        normalized = tuple(claim_id.strip() for claim_id in value)
+        if any(not claim_id for claim_id in normalized):
+            raise ValueError("claim ids must be non-empty")
+        if len(set(normalized)) != len(normalized):
+            raise ValueError("claim ids must be unique within each evidence list")
+        return normalized
+
+    @model_validator(mode="after")
+    def require_evidence(self) -> Type2NarrativeCandidate:
+        if not self.supporting_claim_ids and not self.contradicting_claim_ids:
+            raise ValueError("at least one evidence claim id is required")
+        return self
+
+
+def validate_type2_candidate_claim_ids(
+    candidate: Type2NarrativeCandidate,
+    valid_claim_ids: Iterable[str],
+) -> Type2NarrativeCandidate:
+    valid_claim_id_set = set(valid_claim_ids)
+    referenced_claim_ids = set(candidate.supporting_claim_ids) | set(
+        candidate.contradicting_claim_ids
+    )
+    unknown_claim_ids = referenced_claim_ids - valid_claim_id_set
+    if unknown_claim_ids:
+        ordered_unknown = ", ".join(sorted(unknown_claim_ids))
+        raise ValueError(f"unknown claim ids: {ordered_unknown}")
+    return candidate
+
+
+def build_type2_candidate_prompt(
+    *,
+    company_name: str,
+    claim_text_by_id: Mapping[str, str],
+    max_candidates: int,
+) -> str:
+    company = company_name.strip()
+    if not company:
+        raise ValueError("company_name must be non-empty")
+    if max_candidates <= 0:
+        raise ValueError("max_candidates must be positive")
+    if not claim_text_by_id:
+        raise ValueError("claim_text_by_id must be non-empty")
+
+    claim_lines = "\n".join(
+        f"- {claim_id}: {claim_text_by_id[claim_id].strip()}"
+        for claim_id in sorted(claim_text_by_id)
+    )
+    if any(not claim_text_by_id[claim_id].strip() for claim_id in claim_text_by_id):
+        raise ValueError("claim text must be non-empty")
+
+    # 후보 생성은 구조 제안까지만 허용하고, 선택/확률/평가는 후속 단계로 분리한다.
+    return "\n".join(
+        (
+            f"Propose up to {max_candidates} Type-2 narrative candidates for {company}.",
+            "",
+            "Type-2 narratives are structural alternatives only.",
+            "Human selection happens later; propose candidates only.",
+            "Do not assign probabilities, weights, expected values, or blended valuations.",
+            "Do not perform valuation calculations.",
+            "Do not select a winner or merge candidates into one scenario.",
+            "",
+            "Allowed lifecycle_stage values: " + PROMPT_LIFECYCLE_STAGES + ".",
+            "Each candidate must contain exactly these fields:",
+            "- candidate_id",
+            "- thesis",
+            "- short_description",
+            "- lifecycle_stage",
+            "- tam_structure",
+            "- supporting_claim_ids",
+            "- contradicting_claim_ids",
+            "",
+            "Forbidden fields: " + ", ".join(FORBIDDEN_TYPE2_OUTPUT_FIELDS) + ".",
+            "",
+            "Shared claim pool:",
+            claim_lines,
+            "",
+            "Return JSON only as an array of candidate objects.",
+        )
+    )
+
+
+__all__ = [
+    "FORBIDDEN_TYPE2_OUTPUT_FIELDS",
+    "Type2NarrativeCandidate",
+    "build_type2_candidate_prompt",
+    "validate_type2_candidate_claim_ids",
+]
