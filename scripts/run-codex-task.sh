@@ -52,6 +52,10 @@ done
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="${AUTO_LOOP_PROJECT_DIR:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 CODEX_BIN="${CODEX_BIN:-$(command -v codex 2>/dev/null || true)}"
+TIMEOUT_BIN="${TIMEOUT_BIN:-$(command -v timeout 2>/dev/null || command -v gtimeout 2>/dev/null || true)}"
+CODEX_REVIEW_TIMEOUT_SECONDS="${CODEX_REVIEW_TIMEOUT_SECONDS:-600}"
+CODEX_REVIEW_KILL_AFTER_SECONDS="${CODEX_REVIEW_KILL_AFTER_SECONDS:-30}"
+CODEX_REVIEW_IGNORE_USER_CONFIG="${CODEX_REVIEW_IGNORE_USER_CONFIG:-1}"
 TASK_DIR="$PROJECT_DIR/.auto-loop/tasks"
 LOG_DIR="$PROJECT_DIR/.auto-loop/logs"
 STATUS_FILE="$TASK_DIR/issue-$issue.json"
@@ -150,6 +154,42 @@ PY
 
 has_transient_agent_limit() {
   grep -qiE "usage limit|session limit|try again at|resets [0-9]+[ap]m" "$1"
+}
+
+is_timeout_status() {
+  local status="$1"
+  [[ "$status" -eq 124 || "$status" -eq 137 || "$status" -eq 143 ]]
+}
+
+run_review_codex() {
+  local review_prompt="$1"
+  local review_json="$2"
+  local review_attempt_log="$3"
+  local -a args
+
+  args=("$CODEX_BIN" --ask-for-approval never exec)
+  if [[ "$CODEX_REVIEW_IGNORE_USER_CONFIG" != "0" ]]; then
+    args+=(--ignore-user-config)
+  fi
+  args+=(
+    --cd "$PROJECT_DIR"
+    --sandbox read-only
+    --ephemeral
+    -c 'model_reasoning_effort="high"'
+    --output-schema "$REVIEW_SCHEMA"
+    --output-last-message "$review_json"
+    -
+  )
+
+  if [[ -n "$TIMEOUT_BIN" && -x "$TIMEOUT_BIN" ]]; then
+    "$TIMEOUT_BIN" \
+      --kill-after="${CODEX_REVIEW_KILL_AFTER_SECONDS}s" \
+      "${CODEX_REVIEW_TIMEOUT_SECONDS}s" \
+      "${args[@]}" < "$review_prompt" > "$review_attempt_log" 2>&1
+    return $?
+  fi
+
+  "${args[@]}" < "$review_prompt" > "$review_attempt_log" 2>&1
 }
 
 task_value() {
@@ -426,17 +466,16 @@ write_review_prompt "$review_cycle" "$review_prompt"
 write_status "running" 0 "review"
 
 review_attempt_log="$(mktemp "$LOG_DIR/codex-review-issue-$issue-attempt.XXXXXX")"
-"$CODEX_BIN" --ask-for-approval never exec \
-  --cd "$PROJECT_DIR" \
-  --sandbox read-only \
-  --ephemeral \
-  -c 'model_reasoning_effort="high"' \
-  --output-schema "$REVIEW_SCHEMA" \
-  --output-last-message "$review_json" \
-  - < "$review_prompt" > "$review_attempt_log" 2>&1
+run_review_codex "$review_prompt" "$review_json" "$review_attempt_log"
 review_status=$?
 cat "$review_attempt_log" >> "$EVENT_LOG"
 if [[ "$review_status" -ne 0 ]]; then
+  if is_timeout_status "$review_status"; then
+    write_status "retryable" "$review_status" "review"
+    rm -f "$review_attempt_log"
+    echo "[codex-task] issue #$issue review timed out after ${CODEX_REVIEW_TIMEOUT_SECONDS}s; next scheduled loop will retry"
+    exit 0
+  fi
   if has_transient_agent_limit "$review_attempt_log"; then
     write_status "retryable" "$review_status" "review"
     rm -f "$review_attempt_log"

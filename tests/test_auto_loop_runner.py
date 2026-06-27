@@ -7,6 +7,8 @@ import subprocess
 import time
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 AUTO_LOOP = REPO_ROOT / "scripts" / "auto-loop.sh"
 RUNNER = REPO_ROOT / "scripts" / "run-codex-task.sh"
@@ -110,6 +112,9 @@ def _runner_env(tmp_path: Path, project_dir: Path) -> tuple[dict[str, str], Path
         'if printf "%s\\n" "$@" | grep -q -- "--output-schema"; then\n'
         '  printf "%s\\n" "$@" > "$FAKE_REVIEW_CODEX_ARGS"\n'
         '  cat > "$FAKE_REVIEW_CODEX_PROMPT"\n'
+        '  if [ -n "${FAKE_REVIEW_SLEEP_SECONDS:-}" ]; then\n'
+        '    sleep "$FAKE_REVIEW_SLEEP_SECONDS"\n'
+        "  fi\n"
         '  count=$(cat "$FAKE_REVIEW_COUNT" 2>/dev/null || echo 0)\n'
         "  count=$((count + 1))\n"
         '  echo "$count" > "$FAKE_REVIEW_COUNT"\n'
@@ -234,6 +239,7 @@ def test_direct_codex_runner_uses_high_reasoning_and_records_completion(
     assert (tmp_path / "make-args.txt").read_text().splitlines() == ["verify"]
     review_args = (tmp_path / "review-codex-args.txt").read_text().splitlines()
     assert "--ephemeral" in review_args
+    assert "--ignore-user-config" in review_args
     assert "--output-schema" in review_args
     assert review_args[review_args.index("--sandbox") + 1] == "read-only"
     assert (tmp_path / "review-count.txt").read_text().strip() == "1"
@@ -374,6 +380,66 @@ def test_review_usage_limit_retries_review_only_without_failure_webhook(
     payloads = (tmp_path / "discord-payloads.jsonl").read_text().splitlines()
     assert len(payloads) == 1
     assert "재시도된 독립 리뷰가 통과했습니다." in json.loads(payloads[0])["content"]
+
+
+def test_review_timeout_is_retryable_without_failure_webhook(tmp_path: Path) -> None:
+    timeout_bin = shutil.which("timeout") or shutil.which("gtimeout")
+    if timeout_bin is None:
+        pytest.skip("timeout binary is required for timeout behavior")
+
+    project_dir = tmp_path / "project"
+    project_dir.mkdir()
+    _init_repo(project_dir)
+    state_dir = project_dir / ".auto-loop"
+    state_dir.mkdir()
+    (state_dir / "work-status.md").write_text(
+        "---\n"
+        "phase: implementing\n"
+        "issue: 42\n"
+        "branch: feat/42-review-timeout\n"
+        "review_cycle: 0\n"
+        "pr_approval_message_id: null\n"
+        "updated: 2026-06-25T00:00:00Z\n"
+        "---\n"
+    )
+    prompt_file = project_dir / "task.md"
+    prompt_file.write_text("Keep hung independent reviews retryable.\n")
+    env, _, _ = _runner_env(tmp_path, project_dir)
+    env.update(
+        {
+            "AUTO_LOOP_DISABLE_DISCORD": "0",
+            "DISCORD_WEBHOOK_URL": "https://discord.invalid/webhook",
+            "TIMEOUT_BIN": timeout_bin,
+            "CODEX_REVIEW_TIMEOUT_SECONDS": "0.2",
+            "CODEX_REVIEW_KILL_AFTER_SECONDS": "0.1",
+            "FAKE_REVIEW_SLEEP_SECONDS": "2",
+        }
+    )
+
+    result = subprocess.run(
+        [
+            str(RUNNER),
+            "--issue",
+            "42",
+            "--branch",
+            "feat/42-review-timeout",
+            "--prompt-file",
+            str(prompt_file),
+        ],
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+        timeout=5,
+    )
+
+    assert result.returncode == 0, result.stderr
+    status = json.loads((state_dir / "tasks/issue-42.json").read_text())
+    assert status["status"] == "retryable"
+    assert status["stage"] == "review"
+    assert "finished_at" not in status
+    assert not (tmp_path / "discord-payloads.jsonl").exists()
+    assert "review timed out" in result.stdout
 
 
 def test_non_transient_review_error_stays_failed_and_notifies(tmp_path: Path) -> None:
