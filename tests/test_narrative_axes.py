@@ -1,7 +1,15 @@
 import numpy as np
 import pytest
 
-from dcf_engine.narrative_axes import PullSignature, generate_narrative_axes
+from dcf_engine.assumption import AssumptionState, ScaleSpec
+from dcf_engine.distributions import DistributionFamily
+from dcf_engine.narrative import NarrativeScenarioSet
+from dcf_engine.narrative_axes import (
+    NarrativeAxis,
+    PullSignature,
+    generate_narrative_axes,
+    generate_type1_narrative_candidates,
+)
 
 
 def test_rejects_empty_signature_inputs() -> None:
@@ -95,4 +103,139 @@ def test_preserves_stable_assumption_id_ordering_in_returned_axis_loadings() -> 
         "operating_margin",
         "revenue_cagr",
         "wacc",
+    )
+
+
+def test_narrative_axis_creates_positive_and_negative_type1_candidates() -> None:
+    axis = NarrativeAxis(
+        axis_index=1,
+        explained_variance_ratio=0.72,
+        loadings={"REVENUE_CAGR": 0.50, "OPERATING_MARGIN": -0.25},
+    )
+    assumptions = (
+        _assumption("REVENUE_CAGR", 0.10, shift_scale=0.04),
+        _assumption("OPERATING_MARGIN", 0.20, shift_scale=0.08),
+        _assumption("WACC", 0.09, shift_scale=0.01),
+    )
+
+    candidates = generate_type1_narrative_candidates(
+        axis,
+        assumptions=assumptions,
+        shift_strength=2.0,
+    )
+
+    assert tuple(container.narrative.narrative_id for container in candidates) == (
+        "type1-axis-1-positive",
+        "type1-axis-1-negative",
+    )
+    positive = {
+        assumption.name: assumption
+        for assumption in candidates[0].active_assumptions
+    }
+    negative = {
+        assumption.name: assumption
+        for assumption in candidates[1].active_assumptions
+    }
+    assert tuple(positive) == ("REVENUE_CAGR", "OPERATING_MARGIN", "WACC")
+    assert positive["REVENUE_CAGR"].current_mu == pytest.approx(0.14)
+    assert negative["REVENUE_CAGR"].current_mu == pytest.approx(0.06)
+    assert positive["OPERATING_MARGIN"].current_mu == pytest.approx(0.16)
+    assert negative["OPERATING_MARGIN"].current_mu == pytest.approx(0.24)
+    assert positive["WACC"].current_mu == pytest.approx(0.09)
+    assert negative["WACC"].current_mu == pytest.approx(0.09)
+
+
+def test_generated_type1_candidates_preserve_one_measurement_axis_for_scenario_sets() -> None:
+    axis = NarrativeAxis(
+        axis_index=0,
+        explained_variance_ratio=1.0,
+        loadings={"REVENUE_CAGR": 1.0},
+    )
+    tam_structure = {"market": "ai-accelerators", "segments": ("training", "inference")}
+
+    candidates = generate_type1_narrative_candidates(
+        axis,
+        assumptions=(_assumption("REVENUE_CAGR", 0.10, shift_scale=0.02),),
+        lifecycle_stage="mature",
+        tam_structure=tam_structure,
+    )
+    scenario_set = NarrativeScenarioSet.from_containers(
+        containers=candidates,
+        probabilities_by_narrative={
+            "type1-axis-0-positive": 0.50,
+            "type1-axis-0-negative": 0.50,
+        },
+    )
+
+    assert scenario_set.narrative_ids == (
+        "type1-axis-0-positive",
+        "type1-axis-0-negative",
+    )
+    for container in candidates:
+        assert container.narrative.lifecycle_stage == "mature"
+        assert container.narrative.tam_structure == tam_structure
+
+
+def test_rejects_empty_axis_loadings_for_type1_candidate_generation() -> None:
+    axis = NarrativeAxis(axis_index=0, explained_variance_ratio=1.0, loadings={})
+
+    with pytest.raises(ValueError, match="loadings"):
+        generate_type1_narrative_candidates(
+            axis,
+            assumptions=(_assumption("REVENUE_CAGR", 0.10),),
+        )
+
+
+@pytest.mark.parametrize("bad_loading", [float("nan"), float("inf"), float("-inf")])
+def test_rejects_non_finite_axis_loadings_for_type1_candidate_generation(
+    bad_loading: float,
+) -> None:
+    axis = NarrativeAxis(
+        axis_index=0,
+        explained_variance_ratio=1.0,
+        loadings={"REVENUE_CAGR": bad_loading},
+    )
+
+    with pytest.raises(ValueError, match="finite"):
+        generate_type1_narrative_candidates(
+            axis,
+            assumptions=(_assumption("REVENUE_CAGR", 0.10),),
+        )
+
+
+@pytest.mark.parametrize("bad_shift_strength", [0.0, -1.0])
+def test_rejects_zero_or_negative_type1_candidate_shift_strength(
+    bad_shift_strength: float,
+) -> None:
+    axis = NarrativeAxis(
+        axis_index=0,
+        explained_variance_ratio=1.0,
+        loadings={"REVENUE_CAGR": 1.0},
+    )
+
+    with pytest.raises(ValueError, match="shift_strength"):
+        generate_type1_narrative_candidates(
+            axis,
+            assumptions=(_assumption("REVENUE_CAGR", 0.10),),
+            shift_strength=bad_shift_strength,
+        )
+
+
+def _assumption(
+    name: str,
+    mu: float,
+    *,
+    shift_scale: float = 0.05,
+    family: DistributionFamily = "normal",
+) -> AssumptionState:
+    return AssumptionState(
+        name=name,
+        distribution_family=family,
+        current_mu=mu,
+        current_sigma=0.01,
+        base_mu=mu,
+        base_sigma=0.01,
+        shift_scale=ScaleSpec(center=shift_scale, uncertainty=0.0),
+        constraints={"low": 0.0, "high": 1.0},
+        active=True,
     )
