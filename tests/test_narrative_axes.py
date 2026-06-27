@@ -3,6 +3,7 @@ import pytest
 
 from dcf_engine.assumption import AssumptionState, ScaleSpec
 from dcf_engine.distributions import DistributionFamily
+from dcf_engine.loading import resolved_mu
 from dcf_engine.narrative import NarrativeScenarioSet
 from dcf_engine.narrative_axes import (
     NarrativeAxis,
@@ -138,11 +139,49 @@ def test_narrative_axis_creates_positive_and_negative_type1_candidates() -> None
     }
     assert tuple(positive) == ("REVENUE_CAGR", "OPERATING_MARGIN", "WACC")
     assert positive["REVENUE_CAGR"].current_mu == pytest.approx(0.14)
+    assert positive["REVENUE_CAGR"].base_mu == pytest.approx(0.14)
     assert negative["REVENUE_CAGR"].current_mu == pytest.approx(0.06)
+    assert negative["REVENUE_CAGR"].base_mu == pytest.approx(0.06)
     assert positive["OPERATING_MARGIN"].current_mu == pytest.approx(0.16)
+    assert positive["OPERATING_MARGIN"].base_mu == pytest.approx(0.16)
     assert negative["OPERATING_MARGIN"].current_mu == pytest.approx(0.24)
+    assert negative["OPERATING_MARGIN"].base_mu == pytest.approx(0.24)
     assert positive["WACC"].current_mu == pytest.approx(0.09)
+    assert positive["WACC"].base_mu == pytest.approx(0.09)
     assert negative["WACC"].current_mu == pytest.approx(0.09)
+    assert negative["WACC"].base_mu == pytest.approx(0.09)
+
+
+def test_type1_candidate_shift_reaches_resolved_mu_path() -> None:
+    axis = NarrativeAxis(
+        axis_index=0,
+        explained_variance_ratio=1.0,
+        loadings={"TAM": 1.0},
+    )
+
+    positive, negative = generate_type1_narrative_candidates(
+        axis,
+        assumptions=(_assumption("TAM", 1_000_000_000.0, shift_scale=100_000_000.0),),
+    )
+    positive_assumption = positive.active_assumptions[0]
+    negative_assumption = negative.active_assumptions[0]
+
+    positive_mu = resolved_mu(
+        positive_assumption,
+        {},
+        company={},
+        t_year=0.0,
+    )
+    negative_mu = resolved_mu(
+        negative_assumption,
+        {},
+        company={},
+        t_year=0.0,
+    )
+
+    assert positive_mu == pytest.approx(1_100_000_000.0)
+    assert negative_mu == pytest.approx(900_000_000.0)
+    assert positive_mu != negative_mu
 
 
 def test_generated_type1_candidates_preserve_one_measurement_axis_for_scenario_sets() -> None:
