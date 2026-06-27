@@ -59,6 +59,15 @@ class Type2NarrativeCandidate(BaseModel):
     def require_evidence(self) -> Type2NarrativeCandidate:
         if not self.supporting_claim_ids and not self.contradicting_claim_ids:
             raise ValueError("at least one evidence claim id is required")
+        conflicting_claim_ids = set(self.supporting_claim_ids) & set(
+            self.contradicting_claim_ids
+        )
+        if conflicting_claim_ids:
+            ordered_conflicts = ", ".join(sorted(conflicting_claim_ids))
+            raise ValueError(
+                "claim ids cannot support and contradict the same Type-2 candidate: "
+                f"{ordered_conflicts}"
+            )
         return self
 
 
@@ -104,6 +113,7 @@ def build_type2_candidate_prompt(
             f"Propose up to {max_candidates} Type-2 narrative candidates for {company}.",
             "",
             "Type-2 narratives are structural alternatives only.",
+            "Identify lifecycle/TAM structural fissure evidence from the shared claim pool.",
             "Human selection happens later; propose candidates only.",
             "Do not assign probabilities, weights, expected values, or blended valuations.",
             "Do not perform valuation calculations.",

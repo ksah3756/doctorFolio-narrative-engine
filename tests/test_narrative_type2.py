@@ -116,7 +116,10 @@ def test_type2_candidate_prompt_has_stable_ordering_and_boundary_instructions() 
     claim_1_index = prompt.index("- claim-1: Export controls remain a risk.")
     claim_2_index = prompt.index("- claim-2: Data center demand expanded.")
     assert claim_1_index < claim_2_index
-    assert "Identify lifecycle/TAM structural fissure evidence from the shared claim pool." in prompt
+    assert (
+        "Identify lifecycle/TAM structural fissure evidence from the shared claim pool."
+        in prompt
+    )
     assert "Do not assign probabilities, weights, expected values, or blended valuations." in prompt
     assert "Do not perform valuation calculations." in prompt
     assert "Human selection happens later; propose candidates only." in prompt
