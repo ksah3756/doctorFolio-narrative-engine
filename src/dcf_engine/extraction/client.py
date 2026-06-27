@@ -13,9 +13,11 @@ from typing import Final
 from anthropic import Anthropic
 from anthropic.types import TextBlock
 from openai import OpenAI
+from pydantic import BaseModel, ConfigDict, ValidationError, model_validator
 
 from dcf_engine.claim import Claim
 from dcf_engine.extraction.prompt import EXTRACTION_SYSTEM_PROMPT, build_user_prompt
+from dcf_engine.narrative import ClaimModality
 
 DEEPSEEK_BASE_URL: Final = "https://api.deepseek.com"
 DEEPSEEK_MODEL: Final = "deepseek-v4-flash"
@@ -35,8 +37,24 @@ class ExtractionResponse:
     claims: list[Claim]
     usage: TokenUsage
     latency_ms: int
+    claim_modalities: dict[str, ClaimModality] | None = None
     schema_valid: bool = True
     error: str | None = None
+
+
+class ExtractionPayload(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    claims: list[Claim]
+    claim_modalities: dict[str, ClaimModality]
+
+    @model_validator(mode="after")
+    def modalities_match_claims(self) -> ExtractionPayload:
+        claim_ids = {claim.claim_id for claim in self.claims}
+        modality_ids = set(self.claim_modalities)
+        if modality_ids != claim_ids:
+            raise ValueError("claim_modalities must contain exactly one label per claim_id")
+        return self
 
 
 class DeepSeekExtractionClient:
@@ -95,7 +113,7 @@ class DeepSeekExtractionClient:
             completion_tokens=usage.completion_tokens if usage is not None else 0,
         )
         try:
-            claims = _claims_from_content(content)
+            payload = _extraction_payload_from_content(content)
         except Exception as exc:
             # 응답 생성 이후 schema만 실패한 경우에도 실제 사용량/지연은 benchmark에 반영한다.
             return ExtractionResponse(
@@ -108,9 +126,10 @@ class DeepSeekExtractionClient:
             )
         return ExtractionResponse(
             chunk_id=chunk_id,
-            claims=claims,
+            claims=payload.claims,
             usage=token_usage,
             latency_ms=elapsed_ms,
+            claim_modalities=payload.claim_modalities,
         )
 
 
@@ -163,7 +182,7 @@ class AnthropicExtractionClient:
             completion_tokens=response.usage.output_tokens,
         )
         try:
-            claims = _claims_from_content(_anthropic_text(response.content))
+            payload = _extraction_payload_from_content(_anthropic_text(response.content))
         except Exception as exc:
             # Claude가 schema 제약만 어긴 경우에도 토큰/지연 실측값은 보존한다.
             return ExtractionResponse(
@@ -176,20 +195,28 @@ class AnthropicExtractionClient:
             )
         return ExtractionResponse(
             chunk_id=chunk_id,
-            claims=claims,
+            claims=payload.claims,
             usage=token_usage,
             latency_ms=elapsed_ms,
+            claim_modalities=payload.claim_modalities,
         )
 
 
 def _claims_from_content(content: str) -> list[Claim]:
+    return _extraction_payload_from_content(content).claims
+
+
+def _extraction_payload_from_content(content: str) -> ExtractionPayload:
     data = json.loads(_json_object_text(content))
     if not isinstance(data, dict):
         raise ValueError("LLM response must be a JSON object")
     claims = data.get("claims")
     if not isinstance(claims, list):
         raise ValueError("LLM response must contain a claims list")
-    return [Claim.model_validate(claim) for claim in claims]
+    try:
+        return ExtractionPayload.model_validate(data)
+    except ValidationError as exc:
+        raise ValueError(f"invalid extraction payload: {exc}") from exc
 
 
 def _json_object_text(content: str) -> str:

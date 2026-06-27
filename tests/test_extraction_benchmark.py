@@ -16,8 +16,8 @@ from dcf_engine.extraction.client import (
     CLAUDE_HAIKU_MODEL,
     ExtractionResponse,
     TokenUsage,
-    _extraction_payload_from_content,
     _claims_from_content,
+    _extraction_payload_from_content,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
