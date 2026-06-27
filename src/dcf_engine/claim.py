@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from datetime import date
 from typing import Final, Literal
 
@@ -128,6 +129,13 @@ class Claim(BaseModel):
     source_ref: SourceRef
     chunk_ref: str
     published_date: date
+
+    @model_validator(mode="before")
+    @classmethod
+    def reject_persisted_modality(cls, data: object) -> object:
+        if isinstance(data, Mapping) and "modality" in data:
+            raise ValueError("modality is temporary extraction metadata, not a Claim field")
+        return data
 
     @field_validator("claim_text")
     @classmethod

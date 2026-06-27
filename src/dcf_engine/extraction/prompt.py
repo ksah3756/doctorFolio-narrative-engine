@@ -4,13 +4,21 @@ from __future__ import annotations
 
 from typing import Final
 
-EXTRACTION_PROMPT_VERSION: Final = "m2.1-v1"
+EXTRACTION_PROMPT_VERSION: Final = "m2.1-v2"
 
 EXTRACTION_SYSTEM_PROMPT: Final = """
 You extract valuation-relevant Claim objects from SEC filing chunks.
 
 Return strict json only. The root object must be:
-{"claims": [Claim, ...]}
+{"claims": [Claim, ...], "claim_modalities": {"claim_id": "FACT"}}
+
+claim_modalities is temporary extraction-time metadata used only to build Narrative
+claim activation masks. It is not a final Claim field and must not be stored in the
+Claim or graph schema. Use exactly one label per claim_id:
+FACT | INTERPRETATION | PROJECTION.
+- FACT: observed/reported claim that is shared across every Narrative.
+- INTERPRETATION: analytical read-through selectable by Narrative.
+- PROJECTION: forward-looking scenario claim selectable by Narrative.
 
 Each Claim must match this schema:
 {
@@ -41,6 +49,7 @@ Each Claim must match this schema:
 
 Direction is the factual direction of the measured subject, not the valuation impact.
 For MACRO_EXPOSURE only, set macro_variable to RATE, INFLATION, FX, or COMMODITY.
+Do not include "modality" inside any Claim object; put it only in claim_modalities.
 If a candidate cannot pass numeric, temporal, and entity consistency, omit it.
 Do not infer facts that are absent from the chunk.
 

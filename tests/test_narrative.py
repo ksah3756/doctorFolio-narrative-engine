@@ -73,6 +73,104 @@ def test_claim_activation_mask_keeps_facts_active_and_selects_non_facts() -> Non
     }
 
 
+def test_claim_activation_mask_uses_temporary_extraction_modalities() -> None:
+    from dcf_engine.extraction.client import _extraction_payload_from_content
+
+    payload = _extraction_payload_from_content(
+        """
+        {
+          "claims": [
+            {
+              "claim_id": "reported-revenue",
+              "claim_text": "Revenue increased year over year.",
+              "claim_subject": "DEMAND_SIGNAL",
+              "claim_nature": "REALIZED",
+              "direction": "INCREASE",
+              "magnitude_qualifier": "STRONG",
+              "macro_variable": null,
+              "instrument_type": null,
+              "extraction_quality": {
+                "verbatim_overlap": 0.9,
+                "numeric_consistency": true,
+                "temporal_consistency": true,
+                "entity_consistency": true
+              },
+              "source_ref": {
+                "discovery_channel": "edgar_api",
+                "content_source": "10-Q",
+                "source_reliability": 0.95
+              },
+              "chunk_ref": "chunk-1",
+              "published_date": "2026-05-20"
+            },
+            {
+              "claim_id": "management-readthrough",
+              "claim_text": "Management commentary implies durable demand.",
+              "claim_subject": "DEMAND_SIGNAL",
+              "claim_nature": "GUIDANCE",
+              "direction": "INCREASE",
+              "magnitude_qualifier": "MODERATE",
+              "macro_variable": null,
+              "instrument_type": null,
+              "extraction_quality": {
+                "verbatim_overlap": 0.9,
+                "numeric_consistency": true,
+                "temporal_consistency": true,
+                "entity_consistency": true
+              },
+              "source_ref": {
+                "discovery_channel": "edgar_api",
+                "content_source": "10-Q",
+                "source_reliability": 0.95
+              },
+              "chunk_ref": "chunk-1",
+              "published_date": "2026-05-20"
+            },
+            {
+              "claim_id": "five-year-share-gain",
+              "claim_text": "The company could gain share over five years.",
+              "claim_subject": "COMPETITIVE_POSITION",
+              "claim_nature": "STRUCTURAL",
+              "direction": "INCREASE",
+              "magnitude_qualifier": "MODERATE",
+              "macro_variable": null,
+              "instrument_type": null,
+              "extraction_quality": {
+                "verbatim_overlap": 0.9,
+                "numeric_consistency": true,
+                "temporal_consistency": true,
+                "entity_consistency": true
+              },
+              "source_ref": {
+                "discovery_channel": "edgar_api",
+                "content_source": "10-Q",
+                "source_reliability": 0.95
+              },
+              "chunk_ref": "chunk-1",
+              "published_date": "2026-05-20"
+            }
+          ],
+          "claim_modalities": {
+            "reported-revenue": "FACT",
+            "management-readthrough": "INTERPRETATION",
+            "five-year-share-gain": "PROJECTION"
+          }
+        }
+        """
+    )
+
+    mask = build_claim_activation_mask(
+        claim_modalities=payload.claim_modalities,
+        selected_claim_ids={"five-year-share-gain"},
+    )
+
+    assert mask == {
+        "reported-revenue": True,
+        "management-readthrough": False,
+        "five-year-share-gain": True,
+    }
+
+
 def test_narrative_container_wraps_current_dcf_path_without_changing_behavior() -> None:
     assumptions = _valuation_assumptions()
     direct_samples = _constant_samples(assumptions)
