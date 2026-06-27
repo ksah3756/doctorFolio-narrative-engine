@@ -9,10 +9,13 @@ from typing import Final
 import numpy as np
 from numpy.typing import NDArray
 
+from dcf_engine.assumption import AssumptionState
 from dcf_engine.lifecycle import LifecycleStage
+from dcf_engine.narrative import Narrative, NarrativeContainer
 
 DEFAULT_EXPLAINED_VARIANCE_THRESHOLD: Final = 0.80
 DEFAULT_MAX_AXES: Final = 3
+DEFAULT_TYPE1_SHIFT_STRENGTH: Final = 1.0
 ZERO_VARIANCE_TOLERANCE: Final = 1e-12
 
 type PullVector = Sequence[float] | NDArray[np.float64]
@@ -32,6 +35,44 @@ class NarrativeAxis:
     axis_index: int
     explained_variance_ratio: float
     loadings: Mapping[str, float]
+
+
+def generate_type1_narrative_candidates(
+    axis: NarrativeAxis,
+    *,
+    assumptions: Sequence[AssumptionState],
+    lifecycle_stage: LifecycleStage = "growth",
+    tam_structure: TamStructure | None = None,
+    shift_strength: float = DEFAULT_TYPE1_SHIFT_STRENGTH,
+) -> tuple[NarrativeContainer, NarrativeContainer]:
+    """Create deterministic positive/negative Type-1 candidates from one PCA axis."""
+
+    _validate_type1_candidate_inputs(
+        axis=axis,
+        assumptions=assumptions,
+        shift_strength=shift_strength,
+    )
+    measurement_tam_structure = {} if tam_structure is None else dict(tam_structure)
+    return (
+        _type1_candidate_container(
+            axis=axis,
+            assumptions=assumptions,
+            polarity="positive",
+            direction=1.0,
+            lifecycle_stage=lifecycle_stage,
+            tam_structure=measurement_tam_structure,
+            shift_strength=shift_strength,
+        ),
+        _type1_candidate_container(
+            axis=axis,
+            assumptions=assumptions,
+            polarity="negative",
+            direction=-1.0,
+            lifecycle_stage=lifecycle_stage,
+            tam_structure=measurement_tam_structure,
+            shift_strength=shift_strength,
+        ),
+    )
 
 
 def generate_narrative_axes(
@@ -145,6 +186,74 @@ def _validate_measurement_axis(signatures: Sequence[PullSignature]) -> None:
                 "signatures must share one measurement axis "
                 "(same lifecycle_stage and tam_structure)"
             )
+
+
+def _validate_type1_candidate_inputs(
+    *,
+    axis: NarrativeAxis,
+    assumptions: Sequence[AssumptionState],
+    shift_strength: float,
+) -> None:
+    if not axis.loadings:
+        raise ValueError("axis loadings must be non-empty")
+    if not all(np.isfinite(loading) for loading in axis.loadings.values()):
+        raise ValueError("axis loadings must be finite")
+    if not np.isfinite(shift_strength) or shift_strength <= 0.0:
+        raise ValueError("shift_strength must be finite and positive")
+    if not assumptions:
+        raise ValueError("assumptions must be non-empty")
+
+    assumption_names = tuple(assumption.name for assumption in assumptions)
+    if len(set(assumption_names)) != len(assumption_names):
+        raise ValueError("assumptions must have unique names")
+    missing_assumptions = set(axis.loadings) - set(assumption_names)
+    if missing_assumptions:
+        raise ValueError("axis loadings must reference supplied assumptions")
+
+
+def _type1_candidate_container(
+    *,
+    axis: NarrativeAxis,
+    assumptions: Sequence[AssumptionState],
+    polarity: str,
+    direction: float,
+    lifecycle_stage: LifecycleStage,
+    tam_structure: TamStructure,
+    shift_strength: float,
+) -> NarrativeContainer:
+    narrative = Narrative.default(
+        narrative_id=f"type1-axis-{axis.axis_index}-{polarity}",
+        lifecycle_stage=lifecycle_stage,
+        tam_structure=tam_structure,
+    )
+    return NarrativeContainer.single(
+        narrative=narrative,
+        assumptions=tuple(
+            _shift_assumption_for_axis(
+                assumption=assumption,
+                loading=axis.loadings.get(assumption.name, 0.0),
+                direction=direction,
+                shift_strength=shift_strength,
+            )
+            for assumption in assumptions
+        ),
+    )
+
+
+def _shift_assumption_for_axis(
+    *,
+    assumption: AssumptionState,
+    loading: float,
+    direction: float,
+    shift_strength: float,
+) -> AssumptionState:
+    shifted_mu = (
+        assumption.base_mu
+        + direction * loading * shift_strength * assumption.shift_scale.center
+    )
+    if not np.isfinite(shifted_mu):
+        raise ValueError("generated candidate assumption shifts must be finite")
+    return assumption.with_mu(float(shifted_mu))
 
 
 def _axis_count_for_threshold(
