@@ -54,3 +54,33 @@ def test_sanitizer_removes_prompt_injection_markers() -> None:
 
     assert "ignore previous instructions" not in cleaned.lower()
     assert "Data center revenue increased 154%." in cleaned
+
+
+def test_claim_rejects_persisted_modality_field() -> None:
+    with pytest.raises(ValidationError, match="modality"):
+        Claim.model_validate(
+            {
+                "claim_id": "c1",
+                "claim_text": "Revenue increased.",
+                "claim_subject": "DEMAND_SIGNAL",
+                "claim_nature": "REALIZED",
+                "direction": "INCREASE",
+                "magnitude_qualifier": "STRONG",
+                "macro_variable": None,
+                "instrument_type": None,
+                "modality": "FACT",
+                "extraction_quality": {
+                    "verbatim_overlap": 0.9,
+                    "numeric_consistency": True,
+                    "temporal_consistency": True,
+                    "entity_consistency": True,
+                },
+                "source_ref": {
+                    "discovery_channel": "edgar_api",
+                    "content_source": "10-Q",
+                    "source_reliability": 0.95,
+                },
+                "chunk_ref": "chunk-1",
+                "published_date": "2026-05-20",
+            }
+        )

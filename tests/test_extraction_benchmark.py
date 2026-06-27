@@ -16,6 +16,7 @@ from dcf_engine.extraction.client import (
     CLAUDE_HAIKU_MODEL,
     ExtractionResponse,
     TokenUsage,
+    _extraction_payload_from_content,
     _claims_from_content,
 )
 
@@ -89,13 +90,88 @@ def test_claim_parser_accepts_markdown_wrapped_json() -> None:
               "chunk_ref": "chunk-1",
               "published_date": "2026-05-20"
             }
-          ]
+          ],
+          "claim_modalities": {
+            "actual-1": "FACT"
+          }
         }
         ```
         """
     )
 
     assert claims[0].claim_subject == "DEMAND_SIGNAL"
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        """
+        {
+          "claims": [
+            {
+              "claim_id": "actual-1",
+              "claim_text": "Compute revenue increased.",
+              "claim_subject": "DEMAND_SIGNAL",
+              "claim_nature": "REALIZED",
+              "direction": "INCREASE",
+              "magnitude_qualifier": "STRONG",
+              "macro_variable": null,
+              "instrument_type": null,
+              "extraction_quality": {
+                "verbatim_overlap": 0.9,
+                "numeric_consistency": true,
+                "temporal_consistency": true,
+                "entity_consistency": true
+              },
+              "source_ref": {
+                "discovery_channel": "edgar_api",
+                "content_source": "10-Q",
+                "source_reliability": 0.95
+              },
+              "chunk_ref": "chunk-1",
+              "published_date": "2026-05-20"
+            }
+          ],
+          "claim_modalities": {}
+        }
+        """,
+        """
+        {
+          "claims": [
+            {
+              "claim_id": "actual-1",
+              "claim_text": "Compute revenue increased.",
+              "claim_subject": "DEMAND_SIGNAL",
+              "claim_nature": "REALIZED",
+              "direction": "INCREASE",
+              "magnitude_qualifier": "STRONG",
+              "macro_variable": null,
+              "instrument_type": null,
+              "extraction_quality": {
+                "verbatim_overlap": 0.9,
+                "numeric_consistency": true,
+                "temporal_consistency": true,
+                "entity_consistency": true
+              },
+              "source_ref": {
+                "discovery_channel": "edgar_api",
+                "content_source": "10-Q",
+                "source_reliability": 0.95
+              },
+              "chunk_ref": "chunk-1",
+              "published_date": "2026-05-20"
+            }
+          ],
+          "claim_modalities": {
+            "actual-1": "OBSERVATION"
+          }
+        }
+        """,
+    ],
+)
+def test_extraction_payload_rejects_missing_or_invalid_modalities(content: str) -> None:
+    with pytest.raises(ValueError, match="modality|claim_modalities"):
+        _extraction_payload_from_content(content)
 
 
 def test_schema_validation_rate_counts_invalid_live_responses() -> None:
