@@ -966,6 +966,58 @@ def test_awaiting_claude_review_retries_claude_on_scheduled_loop(tmp_path: Path)
     assert "조건부 Claude 리뷰 재시도" in log
 
 
+@pytest.mark.parametrize("verdict", ["HOLD", "NEEDS_REVISION"])
+def test_awaiting_claude_review_preserves_same_cycle_blocking_verdict(
+    tmp_path: Path,
+    verdict: str,
+) -> None:
+    project_dir, env, claude_called = _auto_loop_env(
+        tmp_path,
+        "awaiting_claude_review",
+        [],
+    )
+    state_path = project_dir / ".auto-loop/work-status.md"
+    state_path.write_text(
+        "---\n"
+        "phase: awaiting_claude_review\n"
+        "issue: 58\n"
+        "branch: feat/58-type2-guardrails\n"
+        "review_cycle: 2\n"
+        f"status: {verdict}\n"
+        "pr_approval_message_id: null\n"
+        "updated: 2026-06-25T00:00:00Z\n"
+        "---\n"
+        "Claude already blocked this review cycle. Wait for a newer Codex cycle.\n"
+    )
+
+    result = subprocess.run(
+        [str(project_dir / "scripts" / "auto-loop.sh")],
+        cwd=project_dir,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert not claude_called.exists()
+    assert not (tmp_path / "codex-called").exists()
+    assert state_path.read_text() == (
+        "---\n"
+        "phase: awaiting_claude_review\n"
+        "issue: 58\n"
+        "branch: feat/58-type2-guardrails\n"
+        "review_cycle: 2\n"
+        f"status: {verdict}\n"
+        "pr_approval_message_id: null\n"
+        "updated: 2026-06-25T00:00:00Z\n"
+        "---\n"
+        "Claude already blocked this review cycle. Wait for a newer Codex cycle.\n"
+    )
+    log = (project_dir / ".auto-loop/logs/auto-loop.log").read_text()
+    assert "same-cycle Claude verdict" in log
+
+
 def test_hung_codex_tick_times_out_and_releases_lock_for_retry(tmp_path: Path) -> None:
     project_dir, env, _ = _auto_loop_env(tmp_path, "idle", [])
     timeout_bin = shutil.which("timeout") or shutil.which("gtimeout")
