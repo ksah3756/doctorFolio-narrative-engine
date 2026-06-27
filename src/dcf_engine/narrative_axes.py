@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Final
 
 import numpy as np
@@ -253,7 +253,9 @@ def _shift_assumption_for_axis(
     )
     if not np.isfinite(shifted_mu):
         raise ValueError("generated candidate assumption shifts must be finite")
-    return assumption.with_mu(float(shifted_mu))
+    candidate_mu = float(shifted_mu)
+    # Type-1 후보는 factor 입력이 아니라 valuation base 자체를 바꾸는 결정적 대안이다.
+    return replace(assumption, current_mu=candidate_mu, base_mu=candidate_mu)
 
 
 def _axis_count_for_threshold(
