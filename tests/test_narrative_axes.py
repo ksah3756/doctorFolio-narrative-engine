@@ -36,10 +36,10 @@ def test_builds_signed_pull_signature_from_contested_evidence() -> None:
         )
     )
 
-    assert signature == PullSignature(
-        assumption_id="revenue_cagr",
-        values=pytest.approx((0.37, 0.30)),
-    )
+    assert signature.assumption_id == "revenue_cagr"
+    assert signature.lifecycle_stage == "growth"
+    assert signature.tam_structure == {}
+    assert signature.values == pytest.approx((0.37, 0.30))
 
 
 def test_rejects_duplicate_contested_evidence_claim_ids_before_aggregation() -> None:

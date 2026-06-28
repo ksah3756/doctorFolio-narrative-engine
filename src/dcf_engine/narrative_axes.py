@@ -31,10 +31,52 @@ class PullSignature:
 
 
 @dataclass(frozen=True)
+class EvidencePull:
+    claim_id: str
+    values: PullVector
+
+
+@dataclass(frozen=True)
+class ContestedAssumptionPullInput:
+    assumption_id: str
+    supporting: Sequence[EvidencePull]
+    contradicting: Sequence[EvidencePull]
+    lifecycle_stage: LifecycleStage = "growth"
+    tam_structure: TamStructure = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
 class NarrativeAxis:
     axis_index: int
     explained_variance_ratio: float
     loadings: Mapping[str, float]
+
+
+def build_pull_signature(contested: ContestedAssumptionPullInput) -> PullSignature:
+    """Build one deterministic PullSignature from one contested assumption."""
+
+    if not contested.assumption_id.strip():
+        raise ValueError("assumption_id must be non-empty")
+
+    signed_evidence = _signed_evidence_items(contested)
+    _validate_evidence_claim_ids(tuple(evidence for _, evidence in signed_evidence))
+
+    first_direction, first_evidence = signed_evidence[0]
+    aggregate = first_direction * _evidence_pull_array(first_evidence)
+    expected_shape = aggregate.shape
+
+    for direction, evidence in signed_evidence[1:]:
+        values = _evidence_pull_array(evidence)
+        if values.shape != expected_shape:
+            raise ValueError("evidence vectors must share the same shape")
+        aggregate += direction * values
+
+    return PullSignature(
+        assumption_id=contested.assumption_id,
+        values=tuple(float(value) for value in aggregate),
+        lifecycle_stage=contested.lifecycle_stage,
+        tam_structure=dict(contested.tam_structure),
+    )
 
 
 def generate_type1_narrative_candidates(
@@ -134,6 +176,41 @@ def _validate_axis_controls(
         raise ValueError("explained_variance_threshold must be finite and in (0, 1]")
     if max_axes < 1:
         raise ValueError("max_axes must be at least 1")
+
+
+def _signed_evidence_items(
+    contested: ContestedAssumptionPullInput,
+) -> tuple[tuple[float, EvidencePull], ...]:
+    signed_evidence = tuple(
+        (1.0, evidence) for evidence in contested.supporting
+    ) + tuple((-1.0, evidence) for evidence in contested.contradicting)
+    if not signed_evidence:
+        raise ValueError("contested evidence must be non-empty")
+    return signed_evidence
+
+
+def _validate_evidence_claim_ids(evidence_items: Sequence[EvidencePull]) -> None:
+    claim_ids = [evidence.claim_id for evidence in evidence_items]
+    if any(not claim_id.strip() for claim_id in claim_ids):
+        raise ValueError("evidence claim_id must be non-empty")
+    duplicate_claim_ids = {
+        claim_id for claim_id in claim_ids if claim_ids.count(claim_id) > 1
+    }
+    if duplicate_claim_ids:
+        ordered_duplicates = ", ".join(sorted(duplicate_claim_ids))
+        raise ValueError(f"duplicate claim ids in contested evidence: {ordered_duplicates}")
+
+
+def _evidence_pull_array(evidence: EvidencePull) -> NDArray[np.float64]:
+    try:
+        values = np.asarray(evidence.values, dtype=np.float64)
+    except (TypeError, ValueError) as error:
+        raise ValueError("evidence values must be numeric") from error
+    if values.ndim != 1 or values.size == 0:
+        raise ValueError("evidence values must be a non-empty one-dimensional vector")
+    if not np.all(np.isfinite(values)):
+        raise ValueError("evidence values must be finite")
+    return values
 
 
 def _ordered_signatures(signatures: Sequence[PullSignature]) -> tuple[PullSignature, ...]:
