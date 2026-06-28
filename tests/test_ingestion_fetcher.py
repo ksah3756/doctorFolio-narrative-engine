@@ -21,15 +21,20 @@ def _entry(
     *,
     title: str,
     href: str,
-    filing_type: str,
+    filing_type: str | None,
     updated: str = "2026-06-24T18:01:05-04:00",
     summary: str = "NVIDIA filed a current report for material corporate events.",
 ) -> str:
+    category = (
+        f'<category label="form type" scheme="https://www.sec.gov/" term="{filing_type}" />'
+        if filing_type is not None
+        else ""
+    )
     return f"""
   <entry>
     <title>{title}</title>
     <link rel="alternate" type="text/html" href="{href}" />
-    <category label="form type" scheme="https://www.sec.gov/" term="{filing_type}" />
+    {category}
     <updated>{updated}</updated>
     <summary type="html">{summary}</summary>
   </entry>
@@ -147,3 +152,45 @@ def test_malformed_entries_do_not_produce_invalid_documents() -> None:
 
     assert len(docs) == 1
     assert docs[0].url == valid_href
+
+
+def test_entry_without_explicit_filing_type_is_skipped() -> None:
+    feed = _edgar_feed(
+        _entry(
+            title="Current report - NVIDIA CORP (0001045810) (Filer)",
+            href="https://www.sec.gov/Archives/edgar/data/1045810/unreadable.htm",
+            filing_type=None,
+        )
+    )
+
+    docs = EdgarRssFetcher(reader=_reader(feed)).fetch_recent("8-K", count=10)
+
+    assert docs == []
+
+
+def test_entry_with_mismatched_filing_type_is_skipped() -> None:
+    feed = _edgar_feed(
+        _entry(
+            title="10-K - NVIDIA CORP (0001045810) (Filer)",
+            href="https://www.sec.gov/Archives/edgar/data/1045810/10k.htm",
+            filing_type="10-K",
+        )
+    )
+
+    docs = EdgarRssFetcher(reader=_reader(feed)).fetch_recent("8-K", count=10)
+
+    assert docs == []
+
+
+def test_entry_with_unsupported_filing_type_is_skipped() -> None:
+    feed = _edgar_feed(
+        _entry(
+            title="8-K/A - NVIDIA CORP (0001045810) (Filer)",
+            href="https://www.sec.gov/Archives/edgar/data/1045810/8ka.htm",
+            filing_type="8-K/A",
+        )
+    )
+
+    docs = EdgarRssFetcher(reader=_reader(feed)).fetch_recent("8-K", count=10)
+
+    assert docs == []
