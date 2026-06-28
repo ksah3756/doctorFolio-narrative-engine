@@ -116,7 +116,33 @@ idle
 - magic number (모든 상수는 명명된 테이블)
 - LLM 호출에 retry 없이 직접 의존 (M2)
 
-## 5. Review Mandate
+## 5. 현재 최우선 과제 (2026-06-28 기준)
+
+**M2 인프라 (ingestion + 추출 + 영속화) 구현이 최우선이다.**
+긴장 탐지(narrative_axes.py PCA 수정)는 실제 claim이 파이프라인을 통과한 뒤로 연기.
+
+### 구현 순서 (design-ingestion-m2-2026-06-28.md §8 기준)
+
+1. `src/dcf_engine/ingestion/fetcher.py` — `SourceDocument` + `EdgarRssFetcher`
+2. `src/dcf_engine/ingestion/chunker.py` — `Chunk` + `chunk_document`
+3. `src/dcf_engine/ingestion/store.py` — `JsonClaimStore`
+4. `src/dcf_engine/ingestion/pipeline.py` — `run_ingestion_pipeline` 통합
+5. Reuters RSS fetcher 추가
+6. 어닝스콜 수동 로더
+7. `scripts/validate_nvda_cycle.py` — 전체 사이클 검증
+
+각 단계 완료 후 `make verify` 통과 필수. 
+상세 사양: `docs/plan/design-ingestion-m2-2026-06-28.md`
+
+### 보류 과제 (M2 검증 통과 전 착수 금지)
+
+- `narrative_axes.py` PCA 수학 수정 (v6.1 패치)
+- Type-1 긴장 탐지 Stage A/B/C 게이트 구현
+- Neo4j 적재 (Phase 2, claim ≥ 200개 누적 후)
+
+---
+
+## 6. Review Mandate
 
 Reviewer (독립 Codex 세션) 평가 기준:
 
