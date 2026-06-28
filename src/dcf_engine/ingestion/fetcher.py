@@ -112,7 +112,7 @@ def _document_from_entry(entry: ET.Element, requested_filing_type: str) -> Sourc
     title = _required_text(entry, "atom:title")
     url = _entry_href(entry)
     published_date = _entry_date(entry)
-    filing_type = _entry_filing_type(entry) or requested_filing_type
+    filing_type = _entry_filing_type(entry)
     raw_text = _entry_summary(entry)
 
     if (
