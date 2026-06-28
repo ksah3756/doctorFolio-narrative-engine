@@ -15,6 +15,7 @@ from dcf_engine.assumption import (
     AssumptionState,
     ReinvestmentTool,
 )
+from dcf_engine.claim import Claim
 from dcf_engine.lifecycle import LifecycleStage
 
 DEFAULT_NARRATIVE_ID: Final = "base"
@@ -242,3 +243,14 @@ def build_claim_activation_mask(
         claim_id: modality == "FACT" or claim_id in selected
         for claim_id, modality in claim_modalities.items()
     }
+
+
+def active_claims_for_narrative(claims: Iterable[Claim], narrative: Narrative) -> list[Claim]:
+    claim_list = list(claims)
+    if not narrative.claim_activation_mask:
+        return claim_list
+    claim_ids = {claim.claim_id for claim in claim_list}
+    mask_ids = set(narrative.claim_activation_mask)
+    if claim_ids != mask_ids:
+        raise ValueError("claim_activation_mask must match claim list ids")
+    return [claim for claim in claim_list if narrative.claim_activation_mask[claim.claim_id]]

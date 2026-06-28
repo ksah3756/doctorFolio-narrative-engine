@@ -9,6 +9,7 @@ from typing import Final, Literal
 from dcf_engine.claim import Claim, ClaimDirection, ClaimSubject, source_reliability
 from dcf_engine.factor import FactorName, FactorState
 from dcf_engine.lifecycle import LifecycleStage
+from dcf_engine.narrative import Narrative, active_claims_for_narrative
 
 type EconomicDriverName = Literal[
     "capital_return",
@@ -99,6 +100,13 @@ def route_claims_to_factors(claims: list[Claim], stage: LifecycleStage) -> dict[
         name: FactorState(name=name, current_value=max(min(value, 3.0), -3.0))
         for name, value in totals.items()
     }
+
+
+def route_narrative_claims_to_factors(
+    claims: list[Claim], narrative: Narrative
+) -> dict[str, FactorState]:
+    active_claims = active_claims_for_narrative(claims, narrative)
+    return route_claims_to_factors(active_claims, narrative.lifecycle_stage)
 
 
 def claims_to_economic_drivers(claims: list[Claim]) -> list[EconomicDriver]:
