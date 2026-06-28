@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from dcf_engine.claim import Claim, ExtractionQuality, SOURCE_RELIABILITY, SourceRef
+from dcf_engine.claim import SOURCE_RELIABILITY, Claim, ExtractionQuality, SourceRef
 from dcf_engine.ingestion import Chunk, JsonClaimStore, JsonClaimStoreError, SourceDocument
 
 
@@ -36,7 +36,7 @@ def _chunk(*, doc_id: str = "nvda-doc", chunk_id: str = "nvda-doc-0001") -> Chun
         sequence=1,
         text="Data center revenue increased as cloud demand expanded.",
         char_start=0,
-        char_end=56,
+        char_end=55,
         source_ref=_source_ref(),
     )
 
@@ -87,7 +87,7 @@ def test_chunk_round_trips_by_doc_id_and_chunk_id_with_offsets(tmp_path: Path) -
     assert payload["doc_id"] == "nvda-doc"
     assert payload["chunk_id"] == "nvda-doc-0001"
     assert payload["char_start"] == 0
-    assert payload["char_end"] == 56
+    assert payload["char_end"] == 55
     assert payload["source_ref"]["content_source"] == "10-Q"
 
 
