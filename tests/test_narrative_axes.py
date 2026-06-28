@@ -6,8 +6,11 @@ from dcf_engine.distributions import DistributionFamily
 from dcf_engine.loading import resolved_mu
 from dcf_engine.narrative import NarrativeScenarioSet
 from dcf_engine.narrative_axes import (
+    ContestedAssumptionPullInput,
+    EvidencePull,
     NarrativeAxis,
     PullSignature,
+    build_pull_signature,
     generate_narrative_axes,
     generate_type1_narrative_candidates,
 )
@@ -16,6 +19,128 @@ from dcf_engine.narrative_axes import (
 def test_rejects_empty_signature_inputs() -> None:
     with pytest.raises(ValueError, match="non-empty"):
         generate_narrative_axes(())
+
+
+def test_builds_signed_pull_signature_from_contested_evidence() -> None:
+    signature = build_pull_signature(
+        ContestedAssumptionPullInput(
+            assumption_id="revenue_cagr",
+            supporting=(
+                EvidencePull(claim_id="support-1", values=(0.30, 0.10)),
+                EvidencePull(claim_id="support-2", values=(0.20, 0.40)),
+            ),
+            contradicting=(
+                EvidencePull(claim_id="risk-1", values=(0.10, 0.05)),
+                EvidencePull(claim_id="risk-2", values=(0.03, 0.15)),
+            ),
+        )
+    )
+
+    assert signature == PullSignature(
+        assumption_id="revenue_cagr",
+        values=pytest.approx((0.37, 0.30)),
+    )
+
+
+def test_rejects_duplicate_contested_evidence_claim_ids_before_aggregation() -> None:
+    contested = ContestedAssumptionPullInput(
+        assumption_id="revenue_cagr",
+        supporting=(EvidencePull(claim_id="claim-1", values=(0.30,)),),
+        contradicting=(EvidencePull(claim_id="claim-1", values=(0.10,)),),
+    )
+
+    with pytest.raises(ValueError, match="duplicate claim ids"):
+        build_pull_signature(contested)
+
+
+def test_contested_pull_signature_preserves_measurement_axis_metadata() -> None:
+    tam_structure = {"market": "ai-accelerators", "segments": ("training", "inference")}
+
+    signature = build_pull_signature(
+        ContestedAssumptionPullInput(
+            assumption_id="tam",
+            supporting=(EvidencePull(claim_id="support", values=(100.0,)),),
+            contradicting=(EvidencePull(claim_id="risk", values=(25.0,)),),
+            lifecycle_stage="mature",
+            tam_structure=tam_structure,
+        )
+    )
+
+    assert signature.lifecycle_stage == "mature"
+    assert signature.tam_structure == tam_structure
+    assert signature.values == pytest.approx((75.0,))
+
+
+def test_built_pull_signatures_feed_narrative_axis_generation_deterministically() -> None:
+    signatures = (
+        build_pull_signature(
+            ContestedAssumptionPullInput(
+                assumption_id="revenue_cagr",
+                supporting=(EvidencePull(claim_id="revenue-support", values=(3.0, 0.0)),),
+                contradicting=(),
+            )
+        ),
+        build_pull_signature(
+            ContestedAssumptionPullInput(
+                assumption_id="wacc",
+                supporting=(),
+                contradicting=(EvidencePull(claim_id="wacc-risk", values=(1.0, 0.0)),),
+            )
+        ),
+    )
+
+    first_axes = generate_narrative_axes(signatures)
+    second_axes = generate_narrative_axes(signatures)
+
+    assert first_axes == second_axes
+    assert first_axes[0].loadings == pytest.approx(
+        {"revenue_cagr": 3.0 / np.sqrt(10.0), "wacc": -1.0 / np.sqrt(10.0)}
+    )
+
+
+def test_rejects_empty_contested_evidence() -> None:
+    contested = ContestedAssumptionPullInput(
+        assumption_id="revenue_cagr",
+        supporting=(),
+        contradicting=(),
+    )
+
+    with pytest.raises(ValueError, match="evidence"):
+        build_pull_signature(contested)
+
+
+@pytest.mark.parametrize("bad_value", [float("nan"), float("inf"), float("-inf")])
+def test_rejects_non_finite_contested_evidence_values(bad_value: float) -> None:
+    contested = ContestedAssumptionPullInput(
+        assumption_id="revenue_cagr",
+        supporting=(EvidencePull(claim_id="support", values=(0.30, bad_value)),),
+        contradicting=(),
+    )
+
+    with pytest.raises(ValueError, match="finite"):
+        build_pull_signature(contested)
+
+
+def test_rejects_empty_contested_assumption_id() -> None:
+    contested = ContestedAssumptionPullInput(
+        assumption_id="",
+        supporting=(EvidencePull(claim_id="support", values=(0.30,)),),
+        contradicting=(),
+    )
+
+    with pytest.raises(ValueError, match="assumption_id"):
+        build_pull_signature(contested)
+
+
+def test_rejects_malformed_contested_evidence_vectors() -> None:
+    contested = ContestedAssumptionPullInput(
+        assumption_id="revenue_cagr",
+        supporting=(EvidencePull(claim_id="support", values=np.array([[0.30]])),),
+        contradicting=(),
+    )
+
+    with pytest.raises(ValueError, match="one-dimensional"):
+        build_pull_signature(contested)
 
 
 def test_rejects_signature_vectors_with_mismatched_shapes() -> None:
