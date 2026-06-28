@@ -89,6 +89,27 @@ def test_mask_driven_routing_rejects_claim_mask_mismatch() -> None:
         route_narrative_claims_to_factors([claim], narrative)
 
 
+def test_narrative_routing_rejects_duplicate_claim_ids_without_mask() -> None:
+    claim = _claim("DEMAND_SIGNAL", "INCREASE").model_copy(update={"claim_id": "reported-demand"})
+    duplicate = _claim("COST_SIGNAL", "INCREASE").model_copy(
+        update={"claim_id": "reported-demand"}
+    )
+
+    with pytest.raises(ValueError, match="claim ids must be unique"):
+        route_narrative_claims_to_factors([claim, duplicate], Narrative.default())
+
+
+def test_narrative_routing_rejects_duplicate_claim_ids_with_mask() -> None:
+    claim = _claim("DEMAND_SIGNAL", "INCREASE").model_copy(update={"claim_id": "reported-demand"})
+    duplicate = _claim("COST_SIGNAL", "INCREASE").model_copy(
+        update={"claim_id": "reported-demand"}
+    )
+    narrative = Narrative.default(claim_activation_mask={"reported-demand": True})
+
+    with pytest.raises(ValueError, match="claim ids must be unique"):
+        route_narrative_claims_to_factors([claim, duplicate], narrative)
+
+
 def test_routing_deduplicates_repeated_economic_drivers() -> None:
     claim = _claim(
         "DEMAND_SIGNAL",
