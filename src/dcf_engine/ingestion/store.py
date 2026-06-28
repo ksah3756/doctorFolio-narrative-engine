@@ -15,6 +15,7 @@ from dcf_engine.ingestion.fetcher import SourceDocument
 
 _DEFAULT_TICKER: Final[str] = "NVDA"
 _STATE_FILE: Final[str] = "pipeline_state.json"
+_INVALID_ARTIFACT_IDS: Final[frozenset[str]] = frozenset({"", ".", ".."})
 
 
 class JsonClaimStoreError(RuntimeError):
@@ -34,13 +35,13 @@ class JsonClaimStore:
     def save_source(self, document: SourceDocument) -> None:
         ticker_dir = self._ticker_dir(self._ticker)
         self._write_json(
-            ticker_dir / "sources" / f"{document.doc_id}.json",
+            _artifact_path(ticker_dir / "sources", document.doc_id),
             document.model_dump(mode="json"),
         )
         self._mark_processed(document.doc_id)
 
     def load_source(self, doc_id: str) -> SourceDocument:
-        path = self._ticker_dir(self._ticker) / "sources" / f"{doc_id}.json"
+        path = _artifact_path(self._ticker_dir(self._ticker) / "sources", doc_id)
         try:
             return SourceDocument.model_validate(_read_json(path))
         except ValidationError as error:
@@ -48,12 +49,12 @@ class JsonClaimStore:
 
     def save_chunk(self, chunk: Chunk) -> None:
         self._write_json(
-            self._ticker_dir(self._ticker) / "chunks" / f"{chunk.chunk_id}.json",
+            _artifact_path(self._ticker_dir(self._ticker) / "chunks", chunk.chunk_id),
             chunk.model_dump(mode="json"),
         )
 
     def load_chunk(self, *, doc_id: str, chunk_id: str) -> Chunk:
-        path = self._ticker_dir(self._ticker) / "chunks" / f"{chunk_id}.json"
+        path = _artifact_path(self._ticker_dir(self._ticker) / "chunks", chunk_id)
         try:
             chunk = Chunk.model_validate(_read_json(path))
         except ValidationError as error:
@@ -64,12 +65,12 @@ class JsonClaimStore:
 
     def save_claims(self, chunk_id: str, claims: list[Claim]) -> None:
         self._write_json(
-            self._ticker_dir(self._ticker) / "claims" / f"{chunk_id}.json",
+            _artifact_path(self._ticker_dir(self._ticker) / "claims", chunk_id),
             [claim.model_dump(mode="json") for claim in claims],
         )
 
-    def load_all_claims(self, *, ticker: str = _DEFAULT_TICKER) -> list[Claim]:
-        claims_dir = self._ticker_dir(ticker) / "claims"
+    def load_all_claims(self, *, ticker: str | None = None) -> list[Claim]:
+        claims_dir = self._ticker_dir(ticker or self._ticker) / "claims"
         if not claims_dir.exists():
             return []
 
@@ -119,6 +120,17 @@ class JsonClaimStore:
     def _write_json(path: Path, payload: object) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+
+
+def _artifact_path(directory: Path, artifact_id: str) -> Path:
+    if (
+        artifact_id in _INVALID_ARTIFACT_IDS
+        or Path(artifact_id).is_absolute()
+        or "/" in artifact_id
+        or "\\" in artifact_id
+    ):
+        raise JsonClaimStoreError(f"Invalid artifact id: {artifact_id!r}")
+    return directory / f"{artifact_id}.json"
 
 
 def _read_json(path: Path) -> object:

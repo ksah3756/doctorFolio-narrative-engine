@@ -106,6 +106,15 @@ def test_save_claims_loads_typed_claims_in_deterministic_order(tmp_path: Path) -
     assert all(isinstance(claim, Claim) for claim in loaded)
 
 
+def test_load_all_claims_defaults_to_instance_ticker(tmp_path: Path) -> None:
+    store = JsonClaimStore(tmp_path, ticker="AAPL")
+    claim = _claim(claim_id="claim-a", chunk_id="aapl-doc-0001")
+
+    store.save_claims("aapl-doc-0001", [claim])
+
+    assert store.load_all_claims() == [claim]
+
+
 def test_processed_state_is_idempotent_across_repeated_source_saves(tmp_path: Path) -> None:
     store = JsonClaimStore(tmp_path)
     document = _document(doc_id="repeat-doc")
@@ -129,3 +138,43 @@ def test_empty_or_corrupt_claim_files_fail_clearly(tmp_path: Path, payload: str)
 
     with pytest.raises(JsonClaimStoreError, match="nvda-doc-0001.json"):
         store.load_all_claims(ticker="NVDA")
+
+
+@pytest.mark.parametrize("doc_id", ["../escape", "/tmp/escape", "nested/doc", "nested\\doc", "."])
+def test_source_document_ids_cannot_escape_store_boundary(tmp_path: Path, doc_id: str) -> None:
+    store = JsonClaimStore(tmp_path)
+
+    with pytest.raises(JsonClaimStoreError, match="Invalid artifact id"):
+        store.save_source(_document(doc_id=doc_id))
+
+    with pytest.raises(JsonClaimStoreError, match="Invalid artifact id"):
+        store.load_source(doc_id)
+    assert not (tmp_path.parent / "escape.json").exists()
+
+
+@pytest.mark.parametrize(
+    "chunk_id",
+    ["../escape", "/tmp/escape", "nested/chunk", "nested\\chunk", "."],
+)
+def test_chunk_ids_cannot_escape_store_boundary(tmp_path: Path, chunk_id: str) -> None:
+    store = JsonClaimStore(tmp_path)
+
+    with pytest.raises(JsonClaimStoreError, match="Invalid artifact id"):
+        store.save_chunk(_chunk(chunk_id=chunk_id))
+
+    with pytest.raises(JsonClaimStoreError, match="Invalid artifact id"):
+        store.load_chunk(doc_id="nvda-doc", chunk_id=chunk_id)
+    assert not (tmp_path.parent / "escape.json").exists()
+
+
+@pytest.mark.parametrize(
+    "chunk_id",
+    ["../escape", "/tmp/escape", "nested/chunk", "nested\\chunk", "."],
+)
+def test_claim_chunk_ids_cannot_escape_store_boundary(tmp_path: Path, chunk_id: str) -> None:
+    store = JsonClaimStore(tmp_path)
+    claim = _claim(claim_id="claim-a", chunk_id=chunk_id)
+
+    with pytest.raises(JsonClaimStoreError, match="Invalid artifact id"):
+        store.save_claims(chunk_id, [claim])
+    assert not (tmp_path.parent / "escape.json").exists()
