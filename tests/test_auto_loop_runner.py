@@ -1282,6 +1282,19 @@ def test_idle_prompts_auto_start_without_implementation_approval() -> None:
     assert "phase idle→implementing" in codex_prompt
 
 
+def test_idle_prompts_size_new_work_as_bounded_vertical_slice() -> None:
+    claude_prompt = (REPO_ROOT / "scripts" / "auto-loop-prompt.md").read_text()
+    codex_prompt = (REPO_ROOT / "scripts" / "codex-auto-loop-prompt.md").read_text()
+
+    assert "중간 크기 vertical slice" in claude_prompt
+    assert "medium vertical slice" in codex_prompt
+    for prompt in (claude_prompt, codex_prompt):
+        assert "3-6" in prompt
+        assert "2-5" in prompt
+        assert "Non-goals" in prompt
+        assert "Stop conditions" in prompt
+
+
 def test_lesson_recorder_writes_structured_entry_and_deduplicates(tmp_path: Path) -> None:
     env = os.environ.copy()
     env["AUTO_LOOP_PROJECT_DIR"] = str(tmp_path)

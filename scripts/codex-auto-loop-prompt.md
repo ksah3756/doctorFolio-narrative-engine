@@ -68,12 +68,28 @@ Choose exactly one task:
 3. If neither exists, use `.auto-loop/work-status.md` Done/current context to propose
    one new task.
 
+### Work Sizing Policy
+
+When no open issue exists and you create a new task directly, account for the fixed
+token/review cost of the loop. Do not split work into units that are too small by
+default. Aim for a **medium vertical slice**.
+
+- Cover exactly one clear domain boundary or one primary-plan section.
+- Include 3-6 related acceptance tests.
+- Keep expected changed files to 2-5.
+- Bundle tiny single-helper/API work with an adjacent step in the same data flow.
+- Do not bundle unrelated domains, PR/loop infrastructure changes, or broad
+  refactors into a feature task.
+- The proposal and implementation brief must include Non-goals and Stop conditions.
+
 Write a plan containing:
 
 - what/why
 - TDD tests to write first
 - expected changed files
 - linked issue number or `신규`
+- Non-goals
+- Stop conditions
 
 Send Discord message:
 
@@ -84,6 +100,8 @@ Send Discord message:
 요약: ...
 테스트(TDD): ...
 변경 예상: ...
+제외 범위: ...
+중단 조건: ...
 → 승인 대기 없이 즉시 착수합니다.
 ```
 
