@@ -247,6 +247,8 @@ def build_claim_activation_mask(
 
 def active_claims_for_narrative(claims: Iterable[Claim], narrative: Narrative) -> list[Claim]:
     claim_list = list(claims)
+    if len(claim_list) != len({claim.claim_id for claim in claim_list}):
+        raise ValueError("claim ids must be unique")
     if not narrative.claim_activation_mask:
         return claim_list
     claim_ids = {claim.claim_id for claim in claim_list}
