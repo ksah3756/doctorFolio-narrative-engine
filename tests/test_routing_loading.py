@@ -1,10 +1,13 @@
 from datetime import date
 
+import pytest
+
 from dcf_engine.assumption import AssumptionState, ScaleSpec
 from dcf_engine.claim import Claim, ClaimDirection, ClaimSubject, ExtractionQuality, SourceRef
 from dcf_engine.factor import FactorState
 from dcf_engine.loading import apply_factor_loadings, apply_mean_reversion
-from dcf_engine.routing import route_claims_to_factors
+from dcf_engine.narrative import Narrative, build_claim_activation_mask
+from dcf_engine.routing import route_claims_to_factors, route_narrative_claims_to_factors
 
 
 def test_routing_keeps_fact_direction_separate_from_value_sign() -> None:
@@ -15,6 +18,75 @@ def test_routing_keeps_fact_direction_separate_from_value_sign() -> None:
 
     assert factors["DemandStrength"].current_value > 0
     assert factors["OperatingEfficiency"].current_value < 0
+
+
+def test_mask_driven_routing_keeps_fact_claims_active() -> None:
+    fact = _claim("DEMAND_SIGNAL", "INCREASE").model_copy(update={"claim_id": "reported-demand"})
+    narrative = Narrative.default(
+        claim_activation_mask=build_claim_activation_mask(
+            claim_modalities={"reported-demand": "FACT"},
+            selected_claim_ids=set(),
+        )
+    )
+
+    factors = route_narrative_claims_to_factors([fact], narrative)
+
+    assert factors == route_claims_to_factors([fact], narrative.lifecycle_stage)
+
+
+def test_mask_driven_routing_excludes_unselected_non_fact_claims() -> None:
+    fact = _claim("DEMAND_SIGNAL", "INCREASE").model_copy(update={"claim_id": "reported-demand"})
+    interpretation = _claim("COST_SIGNAL", "INCREASE").model_copy(
+        update={"claim_id": "cost-readthrough"}
+    )
+    narrative = Narrative.default(
+        claim_activation_mask=build_claim_activation_mask(
+            claim_modalities={
+                "reported-demand": "FACT",
+                "cost-readthrough": "INTERPRETATION",
+            },
+            selected_claim_ids=set(),
+        )
+    )
+
+    factors = route_narrative_claims_to_factors([fact, interpretation], narrative)
+
+    assert factors == route_claims_to_factors([fact], narrative.lifecycle_stage)
+    assert "OperatingEfficiency" not in factors
+
+
+def test_mask_driven_routing_includes_selected_non_fact_claims() -> None:
+    fact = _claim("DEMAND_SIGNAL", "INCREASE").model_copy(update={"claim_id": "reported-demand"})
+    projection = _claim("COMPETITIVE_POSITION", "INCREASE").model_copy(
+        update={"claim_id": "share-gain-projection"}
+    )
+    narrative = Narrative.default(
+        claim_activation_mask=build_claim_activation_mask(
+            claim_modalities={
+                "reported-demand": "FACT",
+                "share-gain-projection": "PROJECTION",
+            },
+            selected_claim_ids={"share-gain-projection"},
+        )
+    )
+
+    factors = route_narrative_claims_to_factors([fact, projection], narrative)
+
+    assert factors == route_claims_to_factors([fact, projection], narrative.lifecycle_stage)
+    assert "CompetitiveAdvantage" in factors
+
+
+def test_mask_driven_routing_rejects_claim_mask_mismatch() -> None:
+    claim = _claim("DEMAND_SIGNAL", "INCREASE").model_copy(update={"claim_id": "reported-demand"})
+    narrative = Narrative.default(
+        claim_activation_mask={
+            "reported-demand": True,
+            "missing-projection": True,
+        }
+    )
+
+    with pytest.raises(ValueError, match="claim_activation_mask"):
+        route_narrative_claims_to_factors([claim], narrative)
 
 
 def test_routing_deduplicates_repeated_economic_drivers() -> None:
