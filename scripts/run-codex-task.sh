@@ -371,9 +371,17 @@ classify_review_risk() {
     --cycle "$cycle"
 }
 
+review_base_ref() {
+  if git rev-parse --verify --quiet origin/main >/dev/null 2>&1; then
+    printf 'origin/main\n'
+  else
+    printf 'main\n'
+  fi
+}
+
 run_implementation() {
   local current_prompt="$1"
-  local head_before head_after codex_status verify_status
+  local head_before head_after codex_status verify_status implementation_base
   head_before="$(git rev-parse HEAD)"
   write_status "running" 0 "codex"
 
@@ -401,11 +409,21 @@ run_implementation() {
   fi
 
   head_after="$(git rev-parse HEAD)"
-  if [[ "$head_after" == "$head_before" ]] || ! git diff --cached --quiet; then
+  if ! git diff --quiet || ! git diff --cached --quiet; then
     write_status "failed" 1 "commit"
     notify_failure
-    echo "[codex-task] issue #$issue: 미커밋 변경 감지 — 완료 차단 (HEAD 미전진 또는 staged 잔존)" >&2
+    echo "[codex-task] issue #$issue: 미커밋 변경 감지 — 완료 차단 (worktree/index dirty)" >&2
     return 1
+  fi
+  if [[ "$head_after" == "$head_before" ]]; then
+    implementation_base="$(review_base_ref)"
+    if git diff --quiet "$implementation_base...HEAD"; then
+      write_status "failed" 1 "commit"
+      notify_failure
+      echo "[codex-task] issue #$issue: 커밋된 구현 없음 — 완료 차단 (HEAD 미전진 및 branch diff 없음)" >&2
+      return 1
+    fi
+    echo "[codex-task] issue #$issue: reusing existing committed work on $branch; continuing to review"
   fi
 }
 
@@ -448,11 +466,7 @@ fi
 
 review_cycle="$(state_value review_cycle)"
 [[ "$review_cycle" =~ ^[0-9]+$ ]] || review_cycle=0
-if git rev-parse --verify --quiet origin/main >/dev/null 2>&1; then
-  review_base="origin/main"
-else
-  review_base="main"
-fi
+review_base="$(review_base_ref)"
 changed_files="$LOG_DIR/codex-review-issue-$issue-changed-files.txt"
 git diff --name-only "$review_base...HEAD" > "$changed_files"
 

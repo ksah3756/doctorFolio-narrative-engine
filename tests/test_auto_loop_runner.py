@@ -134,7 +134,7 @@ def _runner_env(tmp_path: Path, project_dir: Path) -> tuple[dict[str, str], Path
         "count=$((count + 1))\n"
         'echo "$count" > "$FAKE_IMPLEMENTATION_COUNT"\n'
         "# 새 contract: Codex는 작업을 커밋한다 (runner 커밋 가드 충족).\n"
-        'if [ "${FAKE_CODEX_EXIT:-0}" = "0" ]; then\n'
+        'if [ "${FAKE_CODEX_EXIT:-0}" = "0" ] && [ "${FAKE_CODEX_SKIP_COMMIT:-0}" != "1" ]; then\n'
         '  work_path="${FAKE_IMPLEMENTATION_PATH:-codex_work_$count.txt}"\n'
         '  mkdir -p "$(dirname "$work_path")"\n'
         '  echo "work-$count" > "$work_path"\n'
@@ -440,6 +440,75 @@ def test_review_timeout_is_retryable_without_failure_webhook(tmp_path: Path) -> 
     assert "finished_at" not in status
     assert not (tmp_path / "discord-payloads.jsonl").exists()
     assert "review timed out" in result.stdout
+
+
+def test_existing_committed_branch_noop_continues_to_review(tmp_path: Path) -> None:
+    project_dir = tmp_path / "project"
+    project_dir.mkdir()
+    _init_repo(project_dir)
+    subprocess.run(
+        ["git", "switch", "-c", "feat/43-existing-work"],
+        cwd=project_dir,
+        check=True,
+        capture_output=True,
+    )
+    (project_dir / "existing.txt").write_text("already implemented\n")
+    subprocess.run(["git", "add", "existing.txt"], cwd=project_dir, check=True)
+    subprocess.run(
+        ["git", "commit", "-m", "Existing implementation"],
+        cwd=project_dir,
+        check=True,
+        capture_output=True,
+    )
+    state_dir = project_dir / ".auto-loop"
+    state_dir.mkdir()
+    (state_dir / "work-status.md").write_text(
+        "---\n"
+        "phase: implementing\n"
+        "issue: 43\n"
+        "branch: feat/43-existing-work\n"
+        "review_cycle: 0\n"
+        "pr_approval_message_id: null\n"
+        "updated: 2026-06-25T00:00:00Z\n"
+        "---\n"
+    )
+    prompt_file = project_dir / "task.md"
+    prompt_file.write_text("Re-run an already committed implementation.\n")
+    env, _, _ = _runner_env(tmp_path, project_dir)
+    env.update(
+        {
+            "AUTO_LOOP_DISABLE_DISCORD": "0",
+            "DISCORD_WEBHOOK_URL": "https://discord.invalid/webhook",
+            "FAKE_CODEX_SKIP_COMMIT": "1",
+        }
+    )
+
+    result = subprocess.run(
+        [
+            str(RUNNER),
+            "--issue",
+            "43",
+            "--branch",
+            "feat/43-existing-work",
+            "--prompt-file",
+            str(prompt_file),
+        ],
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    status = json.loads((state_dir / "tasks/issue-43.json").read_text())
+    assert status["status"] == "completed"
+    assert status["stage"] == "review"
+    assert (tmp_path / "implementation-count.txt").read_text().strip() == "1"
+    assert (tmp_path / "review-count.txt").read_text().strip() == "1"
+    payloads = (tmp_path / "discord-payloads.jsonl").read_text().splitlines()
+    assert len(payloads) == 1
+    assert "Direct Codex task failed" not in json.loads(payloads[0])["content"]
+    assert "reusing existing committed work" in result.stdout
 
 
 def test_non_transient_review_error_stays_failed_and_notifies(tmp_path: Path) -> None:
