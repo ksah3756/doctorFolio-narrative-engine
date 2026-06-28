@@ -4,6 +4,8 @@ from pydantic import ValidationError
 from dcf_engine.narrative_type2 import (
     Type2NarrativeCandidate,
     build_type2_candidate_prompt,
+    materialize_type2_candidate_container,
+    select_type2_candidate_container,
     validate_type2_candidate_claim_ids,
 )
 
@@ -120,6 +122,91 @@ def test_type2_candidate_validates_evidence_claim_ids_against_shared_pool() -> N
 
     with pytest.raises(ValueError, match="unknown claim ids"):
         validate_type2_candidate_claim_ids(candidate, VALID_CLAIM_IDS)
+
+
+def test_selected_type2_candidate_materializes_structural_narrative_container() -> None:
+    candidate = Type2NarrativeCandidate.model_validate(
+        _candidate_payload()
+        | {
+            "lifecycle_stage": "mature",
+            "tam_structure": {
+                "market": "accelerated-compute",
+                "segments": ["data-center", "edge"],
+            },
+            "supporting_claim_ids": ["claim-2"],
+            "contradicting_claim_ids": ["claim-3"],
+        }
+    )
+
+    container = materialize_type2_candidate_container(
+        candidate=candidate,
+        claim_modalities={
+            "claim-1": "FACT",
+            "claim-2": "INTERPRETATION",
+            "claim-3": "PROJECTION",
+            "claim-4": "INTERPRETATION",
+        },
+        assumptions=(),
+    )
+
+    assert container.narrative.narrative_id == "platform"
+    assert container.narrative.lifecycle_stage == "mature"
+    assert container.narrative.tam_structure == {
+        "market": "accelerated-compute",
+        "segments": ["data-center", "edge"],
+    }
+    assert container.narrative.claim_activation_mask == {
+        "claim-1": True,
+        "claim-2": True,
+        "claim-3": False,
+        "claim-4": False,
+    }
+    assert container.active_assumptions == []
+
+
+def test_selected_type2_candidate_rejects_unknown_supporting_claim_ids() -> None:
+    candidate = Type2NarrativeCandidate.model_validate(
+        _candidate_payload()
+        | {
+            "supporting_claim_ids": ["claim-1", "missing-claim"],
+            "contradicting_claim_ids": ["claim-3"],
+        }
+    )
+
+    with pytest.raises(ValueError, match="unknown claim ids: missing-claim"):
+        materialize_type2_candidate_container(
+            candidate=candidate,
+            claim_modalities={
+                "claim-1": "FACT",
+                "claim-2": "INTERPRETATION",
+                "claim-3": "PROJECTION",
+            },
+            assumptions=(),
+        )
+
+
+def test_select_type2_candidate_container_rejects_duplicate_candidate_ids() -> None:
+    first_candidate = Type2NarrativeCandidate.model_validate(_candidate_payload())
+    second_candidate = Type2NarrativeCandidate.model_validate(
+        _candidate_payload()
+        | {
+            "thesis": "Second structural read with the same candidate id.",
+            "supporting_claim_ids": ["claim-2"],
+            "contradicting_claim_ids": ["claim-3"],
+        }
+    )
+
+    with pytest.raises(ValueError, match="duplicate candidate ids: platform"):
+        select_type2_candidate_container(
+            candidates=(first_candidate, second_candidate),
+            selected_candidate_id="platform",
+            claim_modalities={
+                "claim-1": "FACT",
+                "claim-2": "INTERPRETATION",
+                "claim-3": "PROJECTION",
+            },
+            assumptions=(),
+        )
 
 
 def test_type2_candidate_prompt_has_stable_ordering_and_boundary_instructions() -> None:

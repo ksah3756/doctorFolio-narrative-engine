@@ -8,8 +8,15 @@ from typing import Final
 
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
+from dcf_engine.assumption import AssumptionState
 from dcf_engine.claim import sanitize_claim_text
 from dcf_engine.lifecycle import LifecycleStage
+from dcf_engine.narrative import (
+    ClaimModality,
+    Narrative,
+    NarrativeContainer,
+    build_claim_activation_mask,
+)
 
 FORBIDDEN_TYPE2_OUTPUT_FIELDS: Final[tuple[str, ...]] = (
     "probability",
@@ -116,6 +123,58 @@ def validate_type2_candidate_claim_ids(
     return candidate
 
 
+def materialize_type2_candidate_container(
+    *,
+    candidate: Type2NarrativeCandidate,
+    claim_modalities: Mapping[str, ClaimModality],
+    assumptions: Iterable[AssumptionState],
+) -> NarrativeContainer:
+    validate_type2_candidate_claim_ids(candidate, claim_modalities)
+    claim_activation_mask = build_claim_activation_mask(
+        claim_modalities=claim_modalities,
+        selected_claim_ids=candidate.supporting_claim_ids,
+    )
+    narrative = Narrative.default(
+        narrative_id=candidate.candidate_id,
+        lifecycle_stage=candidate.lifecycle_stage,
+        tam_structure=candidate.tam_structure,
+        claim_activation_mask=claim_activation_mask,
+    )
+    return NarrativeContainer.single(assumptions=assumptions, narrative=narrative)
+
+
+def select_type2_candidate_container(
+    *,
+    candidates: Iterable[Type2NarrativeCandidate],
+    selected_candidate_id: str,
+    claim_modalities: Mapping[str, ClaimModality],
+    assumptions: Iterable[AssumptionState],
+) -> NarrativeContainer:
+    selected_id = selected_candidate_id.strip()
+    if not selected_id:
+        raise ValueError("selected_candidate_id must be non-empty")
+
+    candidates_by_id: dict[str, Type2NarrativeCandidate] = {}
+    duplicate_candidate_ids: set[str] = set()
+    for candidate in candidates:
+        if candidate.candidate_id in candidates_by_id:
+            duplicate_candidate_ids.add(candidate.candidate_id)
+            continue
+        candidates_by_id[candidate.candidate_id] = candidate
+
+    if duplicate_candidate_ids:
+        ordered_duplicates = ", ".join(sorted(duplicate_candidate_ids))
+        raise ValueError(f"duplicate candidate ids: {ordered_duplicates}")
+    if selected_id not in candidates_by_id:
+        raise ValueError(f"unknown candidate id: {selected_id}")
+
+    return materialize_type2_candidate_container(
+        candidate=candidates_by_id[selected_id],
+        claim_modalities=claim_modalities,
+        assumptions=assumptions,
+    )
+
+
 def _format_claim_data_block(claim_id: str, claim_text: str) -> str:
     escaped_claim_id = escape(claim_id, quote=True)
     escaped_claim_text = escape(claim_text, quote=False)
@@ -197,5 +256,7 @@ __all__ = [
     "FORBIDDEN_TYPE2_OUTPUT_FIELDS",
     "Type2NarrativeCandidate",
     "build_type2_candidate_prompt",
+    "materialize_type2_candidate_container",
+    "select_type2_candidate_container",
     "validate_type2_candidate_claim_ids",
 ]
