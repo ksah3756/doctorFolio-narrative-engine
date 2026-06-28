@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 from collections.abc import Callable
+from datetime import date
 
 from dcf_engine.claim import SOURCE_RELIABILITY, SourceRef
 from dcf_engine.ingestion import EdgarRssFetcher, SourceDocument
@@ -61,7 +62,7 @@ def test_nvda_8k_rss_entry_parses_into_source_document() -> None:
             doc_id=hashlib.sha256(href.encode()).hexdigest()[:12],
             url=href,
             title="8-K - NVIDIA CORP (0001045810) (Filer)",
-            published_date="2026-06-24",
+            published_date=date(2026, 6, 24),
             source_ref=SourceRef(
                 discovery_channel="edgar_api",
                 content_source="8-K",
