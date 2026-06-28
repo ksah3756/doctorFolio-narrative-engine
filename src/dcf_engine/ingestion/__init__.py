@@ -1,5 +1,6 @@
 """Source ingestion boundaries."""
 
+from dcf_engine.ingestion.chunker import Chunk, chunk_document
 from dcf_engine.ingestion.fetcher import EdgarRssFetcher, SourceDocument
 
-__all__ = ["EdgarRssFetcher", "SourceDocument"]
+__all__ = ["Chunk", "EdgarRssFetcher", "SourceDocument", "chunk_document"]

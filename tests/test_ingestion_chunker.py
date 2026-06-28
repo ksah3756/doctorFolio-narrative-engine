@@ -37,6 +37,7 @@ def test_single_document_chunks_are_ordered_traceable_and_immutable() -> None:
     chunks = chunk_document(document, max_tokens=80)
 
     assert [chunk.chunk_id for chunk in chunks] == ["nvda-10q-0001"]
+    assert isinstance(chunks[0], Chunk)
     assert [chunk.sequence for chunk in chunks] == [1]
     assert chunks[0].doc_id == document.doc_id
     assert chunks[0].source_ref == document.source_ref
