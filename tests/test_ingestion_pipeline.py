@@ -8,7 +8,7 @@ import pytest
 
 from dcf_engine.claim import SOURCE_RELIABILITY, Claim, ExtractionQuality, SourceRef
 from dcf_engine.extraction.client import ExtractionResponse, TokenUsage
-from dcf_engine.ingestion import JsonClaimStore, SourceDocument
+from dcf_engine.ingestion import JsonClaimStore, ManualTranscriptLoader, SourceDocument
 from dcf_engine.ingestion.pipeline import run_ingestion_pipeline
 
 
@@ -287,3 +287,41 @@ def test_load_all_claims_returns_pipeline_saved_claim_objects_in_store_order(
     loaded = store.load_all_claims()
     assert loaded == [first_claim, second_claim]
     assert all(isinstance(claim, Claim) for claim in loaded)
+
+
+def test_manual_transcript_loader_runs_through_source_fetcher_contract(
+    tmp_path: Path,
+) -> None:
+    transcript_path = tmp_path / "nvda-call.txt"
+    transcript_path.write_text("NVIDIA demand increased as Blackwell production ramped.")
+    loader = ManualTranscriptLoader(
+        path=transcript_path,
+        title="NVIDIA earnings call",
+        published_date=date(2026, 5, 27),
+        source_url="file://nvda-call",
+    )
+    doc_id = "8ae82c4d1bef"
+    chunk_id = f"{doc_id}-0001"
+    source_ref = SourceRef(
+        discovery_channel="direct",
+        content_source="earnings_call",
+        source_reliability=SOURCE_RELIABILITY["earnings_call"],
+    )
+    claim = _claim(claim_id="manual-transcript-claim", chunk_id=chunk_id).model_copy(
+        update={
+            "source_ref": source_ref,
+            "published_date": date(2026, 5, 27),
+            "claim_text": "NVIDIA demand increased as Blackwell production ramped.",
+        }
+    )
+    extractor = RecordingExtractor({chunk_id: _response(chunk_id=chunk_id, claims=[claim])})
+    store = JsonClaimStore(tmp_path / "store")
+
+    result = run_ingestion_pipeline(fetchers=[loader], store=store, extractor=extractor)
+
+    assert result.documents_fetched == 1
+    assert result.documents_processed == 1
+    assert result.claims_saved == 1
+    assert result.error_count == 0
+    assert store.load_source(doc_id).content_source == "earnings_call"
+    assert store.load_all_claims() == [claim]
