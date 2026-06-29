@@ -5,9 +5,14 @@ from datetime import date
 import numpy as np
 import pytest
 
-from dcf_engine.claim import Claim, ExtractionQuality, SourceRef
+from dcf_engine.claim import (
+    Claim,
+    ClaimDirection,
+    ClaimSubject,
+    ExtractionQuality,
+    SourceRef,
+)
 from dcf_engine.validate_cycle import ValidationReport, run_validation_cycle
-
 
 VALIDATION_TEST_SEED = 20260629
 VALIDATION_TEST_ITERATIONS = 300
@@ -99,8 +104,8 @@ def test_validation_cycle_does_not_mutate_input_claims() -> None:
 
 def _claim(
     claim_id: str,
-    subject: str,
-    direction: str,
+    subject: ClaimSubject,
+    direction: ClaimDirection,
     *,
     text: str = "Data Center revenue increased as AI demand expanded.",
 ) -> Claim:

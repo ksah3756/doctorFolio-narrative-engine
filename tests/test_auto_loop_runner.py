@@ -250,6 +250,17 @@ def test_direct_codex_runner_uses_high_reasoning_and_records_completion(
     assert status["branch"] == "feat/42-direct-codex"
     assert status["exit_code"] == 0
     assert status["stage"] == "review"
+    task_worktree = tmp_path / "worktrees" / "feat-42-direct-codex"
+    assert (
+        subprocess.run(
+            ["git", "branch", "--show-current"],
+            cwd=task_worktree,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        == "feat/42-direct-codex"
+    )
     assert (
         subprocess.run(
             ["git", "branch", "--show-current"],
@@ -258,7 +269,7 @@ def test_direct_codex_runner_uses_high_reasoning_and_records_completion(
             capture_output=True,
             text=True,
         ).stdout.strip()
-        == "feat/42-direct-codex"
+        == "main"
     )
 
 
