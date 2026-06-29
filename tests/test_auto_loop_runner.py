@@ -273,6 +273,40 @@ def test_direct_codex_runner_uses_high_reasoning_and_records_completion(
     )
 
 
+def test_direct_codex_runner_resolves_relative_prompt_before_worktree_cd(
+    tmp_path: Path,
+) -> None:
+    project_dir = tmp_path / "project"
+    project_dir.mkdir()
+    _init_repo(project_dir)
+    prompt_file = project_dir / ".auto-loop/tasks/issue-44-review-1-fix.md"
+    prompt_file.parent.mkdir(parents=True)
+    prompt_file.write_text("Fix the review finding.\n")
+    env, _, codex_prompt_file = _runner_env(tmp_path, project_dir)
+
+    result = subprocess.run(
+        [
+            str(RUNNER),
+            "--issue",
+            "44",
+            "--branch",
+            "feat/44-relative-prompt",
+            "--prompt-file",
+            ".auto-loop/tasks/issue-44-review-1-fix.md",
+        ],
+        cwd=project_dir,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert codex_prompt_file.read_text() == prompt_file.read_text()
+    status = json.loads((project_dir / ".auto-loop/tasks/issue-44.json").read_text())
+    assert status["status"] == "completed"
+
+
 def test_direct_codex_runner_records_codex_failure_without_verifying(tmp_path: Path) -> None:
     project_dir = tmp_path / "project"
     project_dir.mkdir()
