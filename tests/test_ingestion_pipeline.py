@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import Iterable
+import hashlib
+from collections.abc import Callable, Iterable
 from datetime import date
 from pathlib import Path
 
@@ -8,7 +9,12 @@ import pytest
 
 from dcf_engine.claim import SOURCE_RELIABILITY, Claim, ExtractionQuality, SourceRef
 from dcf_engine.extraction.client import ExtractionResponse, TokenUsage
-from dcf_engine.ingestion import JsonClaimStore, ManualTranscriptLoader, SourceDocument
+from dcf_engine.ingestion import (
+    JsonClaimStore,
+    ManualTranscriptLoader,
+    ReutersRssFetcher,
+    SourceDocument,
+)
 from dcf_engine.ingestion.pipeline import run_ingestion_pipeline
 
 
@@ -61,6 +67,42 @@ def _document(*, doc_id: str = "nvda-doc", raw_text: str | None = None) -> Sourc
         raw_text=raw_text
         or "Data center revenue increased as cloud customers expanded deployment plans.",
     )
+
+
+def _rss_feed(items: str) -> str:
+    return f"""<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Reuters Business News</title>
+    {items}
+  </channel>
+</rss>
+"""
+
+
+def _rss_item(
+    *,
+    title: str,
+    link: str,
+    pub_date: str = "Tue, 24 Jun 2026 18:01:05 GMT",
+    description: str = "NVIDIA shares rose after analysts cited Blackwell demand.",
+) -> str:
+    return f"""
+    <item>
+      <title>{title}</title>
+      <link>{link}</link>
+      <pubDate>{pub_date}</pubDate>
+      <description>{description}</description>
+    </item>
+"""
+
+
+def _rss_reader(feed_text: str) -> Callable[[str], str]:
+    def read(url: str) -> str:
+        assert "reuters" in url.lower()
+        return feed_text
+
+    return read
 
 
 def _claim(*, claim_id: str, chunk_id: str) -> Claim:
@@ -324,4 +366,49 @@ def test_manual_transcript_loader_runs_through_source_fetcher_contract(
     assert result.claims_saved == 1
     assert result.error_count == 0
     assert store.load_source(doc_id).content_source == "earnings_call"
+    assert store.load_all_claims() == [claim]
+
+
+def test_reuters_rss_fetcher_runs_through_source_fetcher_pipeline_contract(
+    tmp_path: Path,
+) -> None:
+    article_url = "https://www.reuters.com/technology/nvidia-blackwell-demand-2026-06-24/"
+    feed = _rss_feed(
+        _rss_item(
+            title="NVIDIA shares rise on Blackwell demand",
+            link=article_url,
+            description="<p>NVIDIA shares rose after analysts cited Blackwell demand.</p>",
+        )
+    )
+    doc_id = hashlib.sha256(article_url.encode()).hexdigest()[:12]
+    chunk_id = f"{doc_id}-0001"
+    source_ref = SourceRef(
+        discovery_channel="rss_aggregator",
+        content_source="reuters",
+        source_reliability=SOURCE_RELIABILITY["reuters"],
+    )
+    claim = _claim(claim_id="reuters-rss-claim", chunk_id=chunk_id).model_copy(
+        update={
+            "source_ref": source_ref,
+            "published_date": date(2026, 6, 24),
+            "claim_text": "NVIDIA shares rose after analysts cited Blackwell demand.",
+        }
+    )
+    extractor = RecordingExtractor({chunk_id: _response(chunk_id=chunk_id, claims=[claim])})
+    store = JsonClaimStore(tmp_path / "store")
+
+    result = run_ingestion_pipeline(
+        fetchers=[ReutersRssFetcher(reader=_rss_reader(feed))],
+        store=store,
+        extractor=extractor,
+    )
+
+    assert result.documents_fetched == 1
+    assert result.documents_processed == 1
+    assert result.chunks_processed == 1
+    assert result.claims_saved == 1
+    assert result.error_count == 0
+    assert extractor.calls == [chunk_id]
+    assert store.load_source(doc_id).source_ref == source_ref
+    assert store.load_chunk(doc_id=doc_id, chunk_id=chunk_id).source_ref == source_ref
     assert store.load_all_claims() == [claim]
