@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
 from datetime import date
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -12,6 +16,7 @@ from dcf_engine.claim import (
     ExtractionQuality,
     SourceRef,
 )
+from dcf_engine.ingestion import JsonClaimStore
 from dcf_engine.validate_cycle import ValidationReport, run_validation_cycle
 
 VALIDATION_TEST_SEED = 20260629
@@ -100,6 +105,32 @@ def test_validation_cycle_does_not_mutate_input_claims() -> None:
     )
 
     assert tuple(claims) == original
+
+
+def test_validate_nvda_cli_default_data_dir_matches_json_store_root(
+    tmp_path: Path,
+) -> None:
+    store = JsonClaimStore(tmp_path / "data")
+    store.save_claims("nvda-doc-0001", [_claim("demand-growth", "DEMAND_SIGNAL", "INCREASE")])
+
+    repo_root = Path(__file__).resolve().parents[1]
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(repo_root / "scripts/validate_nvda_cycle.py"),
+            "--seed",
+            str(VALIDATION_TEST_SEED),
+            "--iterations",
+            str(VALIDATION_TEST_ITERATIONS),
+        ],
+        cwd=tmp_path,
+        env={**os.environ, "PYTHONPATH": str(repo_root / "src")},
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+
+    assert "claims_used: 1" in result.stdout
 
 
 def _claim(
