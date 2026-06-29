@@ -1,7 +1,12 @@
 """Source ingestion boundaries."""
 
 from dcf_engine.ingestion.chunker import Chunk, chunk_document
-from dcf_engine.ingestion.fetcher import EdgarRssFetcher, SourceDocument
+from dcf_engine.ingestion.fetcher import (
+    EdgarRssFetcher,
+    ManualTranscriptLoader,
+    ReutersRssFetcher,
+    SourceDocument,
+)
 from dcf_engine.ingestion.pipeline import (
     ExtractionClient,
     IngestionError,
@@ -19,6 +24,8 @@ __all__ = [
     "IngestionResult",
     "JsonClaimStore",
     "JsonClaimStoreError",
+    "ManualTranscriptLoader",
+    "ReutersRssFetcher",
     "SourceDocument",
     "SourceFetcher",
     "chunk_document",

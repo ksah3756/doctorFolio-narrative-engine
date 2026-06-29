@@ -1,4 +1,4 @@
-"""EDGAR RSS source document fetchers."""
+"""Source document fetchers for ingestion input boundaries."""
 
 from __future__ import annotations
 
@@ -9,6 +9,8 @@ import urllib.request
 import xml.etree.ElementTree as ET
 from collections.abc import Callable
 from datetime import date, datetime
+from email.utils import parsedate_to_datetime
+from pathlib import Path
 from typing import Final, Literal
 from urllib.parse import urlencode
 
@@ -23,7 +25,9 @@ _ATOM_NS: Final[dict[str, str]] = {"atom": "http://www.w3.org/2005/Atom"}
 _SUPPORTED_FILINGS: Final[frozenset[str]] = frozenset({"8-K", "10-Q", "10-K"})
 _SEC_BROWSE_URL: Final[str] = "https://www.sec.gov/cgi-bin/browse-edgar"
 _SEC_USER_AGENT: Final[str] = "dcf-narrative-engine/0.1 contact=research@example.com"
+_REUTERS_RSS_URL: Final[str] = "https://www.reuters.com/technology/rss"
 _TAG_RE: Final[re.Pattern[str]] = re.compile(r"<[^>]+>")
+_NVDA_RE: Final[re.Pattern[str]] = re.compile(r"\b(?:NVDA|NVIDIA)\b", re.IGNORECASE)
 
 
 class SourceDocument(BaseModel):
@@ -75,6 +79,64 @@ class EdgarRssFetcher:
         return documents
 
 
+class ReutersRssFetcher:
+    """Fetch and parse Reuters RSS entries that mention NVIDIA or NVDA."""
+
+    def __init__(
+        self,
+        *,
+        feed_url: str = _REUTERS_RSS_URL,
+        reader: FeedReader | None = None,
+    ) -> None:
+        self._feed_url = feed_url
+        self._reader = reader or _read_url
+
+    def fetch(self) -> list[SourceDocument]:
+        feed_text = self._reader(self._feed_url)
+        documents: list[SourceDocument] = []
+        for item in _rss_items(feed_text):
+            document = _reuters_document_from_item(item)
+            if document is not None:
+                documents.append(document)
+        return documents
+
+
+class ManualTranscriptLoader:
+    """Load a caller-provided local transcript as one earnings-call source document."""
+
+    def __init__(
+        self,
+        *,
+        path: Path,
+        title: str,
+        published_date: date,
+        source_url: str | None = None,
+    ) -> None:
+        self._path = path
+        self._title = title
+        self._published_date = published_date
+        self._source_url = source_url or path.as_uri()
+
+    def fetch(self) -> list[SourceDocument]:
+        title = _normalize_text(self._title)
+        raw_text = _normalize_text(self._path.read_text())
+        source_ref = SourceRef(
+            discovery_channel="direct",
+            content_source="earnings_call",
+            source_reliability=SOURCE_RELIABILITY["earnings_call"],
+        )
+        return [
+            SourceDocument(
+                doc_id=_doc_id(f"{self._source_url}|{self._published_date.isoformat()}"),
+                url=self._source_url,
+                title=title,
+                published_date=self._published_date,
+                source_ref=source_ref,
+                raw_text=raw_text,
+            )
+        ]
+
+
 def _read_url(url: str) -> str:
     request = urllib.request.Request(url, headers={"User-Agent": _SEC_USER_AGENT})
     with urllib.request.urlopen(request, timeout=30) as response:
@@ -106,6 +168,14 @@ def _feed_entries(feed_text: str) -> list[ET.Element]:
     except ET.ParseError:
         return []
     return root.findall("atom:entry", _ATOM_NS)
+
+
+def _rss_items(feed_text: str) -> list[ET.Element]:
+    try:
+        root = ET.fromstring(feed_text)
+    except ET.ParseError:
+        return []
+    return root.findall("./channel/item")
 
 
 def _document_from_entry(entry: ET.Element, requested_filing_type: str) -> SourceDocument | None:
@@ -183,10 +253,73 @@ def _entry_summary(entry: ET.Element) -> str | None:
     summary = _required_text(entry, "atom:summary")
     if summary is None:
         return None
-    unescaped = html.unescape(summary)
-    text = _TAG_RE.sub(" ", unescaped)
-    stripped = " ".join(text.split())
-    return stripped or None
+    return _normalize_html_text(summary) or None
+
+
+def _reuters_document_from_item(item: ET.Element) -> SourceDocument | None:
+    title = _rss_required_text(item, "title")
+    url = _rss_required_text(item, "link")
+    published_date = _rss_date(item)
+    raw_text = _rss_description(item)
+
+    if title is None or url is None or published_date is None or raw_text is None:
+        return None
+    if not _is_nvda_relevant(title, raw_text):
+        return None
+
+    source_ref = SourceRef(
+        discovery_channel="rss_aggregator",
+        content_source="reuters",
+        source_reliability=SOURCE_RELIABILITY["reuters"],
+    )
+    return SourceDocument(
+        doc_id=_doc_id(url),
+        url=url,
+        title=title,
+        published_date=published_date,
+        source_ref=source_ref,
+        raw_text=raw_text,
+    )
+
+
+def _rss_required_text(item: ET.Element, path: str) -> str | None:
+    value = item.findtext(path)
+    if value is None:
+        return None
+    normalized = _normalize_text(value)
+    return normalized or None
+
+
+def _rss_description(item: ET.Element) -> str | None:
+    description = item.find("description")
+    if description is None:
+        return None
+    value = "".join(description.itertext())
+    normalized = _normalize_html_text(value)
+    return normalized or None
+
+
+def _rss_date(item: ET.Element) -> date | None:
+    value = _rss_required_text(item, "pubDate")
+    if value is None:
+        return None
+    try:
+        return parsedate_to_datetime(value).date()
+    except (TypeError, ValueError):
+        return None
+
+
+def _is_nvda_relevant(title: str, raw_text: str) -> bool:
+    return _NVDA_RE.search(f"{title} {raw_text}") is not None
+
+
+def _normalize_html_text(value: str) -> str:
+    unescaped = html.unescape(value)
+    return _normalize_text(_TAG_RE.sub(" ", unescaped))
+
+
+def _normalize_text(value: str) -> str:
+    return " ".join(value.split())
 
 
 def _doc_id(url: str) -> str:
