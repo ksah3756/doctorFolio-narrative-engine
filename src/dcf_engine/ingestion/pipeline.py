@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from dcf_engine.extraction.client import ExtractionResponse
-from dcf_engine.ingestion.chunker import DEFAULT_MAX_TOKENS, chunk_document
+from dcf_engine.ingestion.chunker import DEFAULT_MAX_TOKENS, Chunk, chunk_document
 from dcf_engine.ingestion.fetcher import SourceDocument
 from dcf_engine.ingestion.store import JsonClaimStore
 
@@ -114,6 +114,20 @@ def run_ingestion_pipeline(
                     )
                     continue
 
+                provenance_error = _claim_provenance_error(
+                    response=response, document=document, chunk=chunk
+                )
+                if provenance_error is not None:
+                    counters.chunks_rejected += 1
+                    errors.append(
+                        IngestionError(
+                            doc_id=document.doc_id,
+                            chunk_id=chunk.chunk_id,
+                            message=provenance_error,
+                        )
+                    )
+                    continue
+
                 store.save_claims(chunk.chunk_id, response.claims)
                 counters.claims_saved += len(response.claims)
 
@@ -151,3 +165,24 @@ def _extract_or_error(
             )
         )
         return None
+
+
+def _claim_provenance_error(
+    *, response: ExtractionResponse, document: SourceDocument, chunk: Chunk
+) -> str | None:
+    for claim in response.claims:
+        mismatches: list[str] = []
+        if claim.chunk_ref != chunk.chunk_id:
+            mismatches.append(
+                f"chunk_ref {claim.chunk_ref!r} did not match {chunk.chunk_id!r}"
+            )
+        if claim.source_ref != chunk.source_ref:
+            mismatches.append("source_ref did not match chunk source_ref")
+        if claim.published_date != document.published_date:
+            mismatches.append(
+                f"published_date {claim.published_date.isoformat()!r} "
+                f"did not match {document.published_date.isoformat()!r}"
+            )
+        if mismatches:
+            return f"claim provenance mismatch for {claim.claim_id!r}: {'; '.join(mismatches)}"
+    return None
