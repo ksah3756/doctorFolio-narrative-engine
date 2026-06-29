@@ -4,6 +4,8 @@ from collections.abc import Iterable
 from datetime import date
 from pathlib import Path
 
+import pytest
+
 from dcf_engine.claim import SOURCE_RELIABILITY, Claim, ExtractionQuality, SourceRef
 from dcf_engine.extraction.client import ExtractionResponse, TokenUsage
 from dcf_engine.ingestion import JsonClaimStore, SourceDocument
@@ -38,6 +40,14 @@ def _source_ref() -> SourceRef:
         discovery_channel="edgar_api",
         content_source="10-Q",
         source_reliability=SOURCE_RELIABILITY["10-Q"],
+    )
+
+
+def _alternate_source_ref() -> SourceRef:
+    return SourceRef(
+        discovery_channel="direct",
+        content_source="press_release",
+        source_reliability=SOURCE_RELIABILITY["press_release"],
     )
 
 
@@ -175,6 +185,38 @@ def test_schema_invalid_response_rejects_chunk_without_saving_claims(tmp_path: P
     assert result.claims_saved == 0
     assert result.error_count == 1
     assert result.errors[0].chunk_id == chunk_id
+    assert store.load_all_claims() == []
+
+
+@pytest.mark.parametrize("mismatch", ["chunk_ref", "source_ref", "published_date"])
+def test_claim_provenance_mismatch_rejects_chunk_without_saving_claims(
+    tmp_path: Path, mismatch: str
+) -> None:
+    store = JsonClaimStore(tmp_path)
+    document = _document(doc_id="provenance-doc")
+    chunk_id = "provenance-doc-0001"
+    claim = _claim(claim_id=f"bad-{mismatch}", chunk_id=chunk_id)
+    if mismatch == "chunk_ref":
+        claim = claim.model_copy(update={"chunk_ref": "other-doc-0001"})
+    elif mismatch == "source_ref":
+        claim = claim.model_copy(update={"source_ref": _alternate_source_ref()})
+    else:
+        claim = claim.model_copy(update={"published_date": date(2026, 6, 23)})
+    extractor = RecordingExtractor(
+        {chunk_id: _response(chunk_id=chunk_id, claims=[claim])}
+    )
+
+    result = run_ingestion_pipeline(
+        fetchers=[FixtureFetcher([document])], store=store, extractor=extractor
+    )
+
+    assert result.documents_processed == 1
+    assert result.chunks_processed == 1
+    assert result.chunks_rejected == 1
+    assert result.claims_saved == 0
+    assert result.error_count == 1
+    assert result.errors[0].chunk_id == chunk_id
+    assert "claim provenance" in result.errors[0].message
     assert store.load_all_claims() == []
 
 
