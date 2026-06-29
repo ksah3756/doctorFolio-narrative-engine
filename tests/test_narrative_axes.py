@@ -6,12 +6,15 @@ from dcf_engine.distributions import DistributionFamily
 from dcf_engine.loading import resolved_mu
 from dcf_engine.narrative import NarrativeScenarioSet
 from dcf_engine.narrative_axes import (
+    ClaimAssumptionPull,
     ContestedAssumptionPullInput,
     EvidencePull,
     NarrativeAxis,
     PullSignature,
     build_pull_signature,
+    evaluate_type1_assumption_mass_gates,
     generate_narrative_axes,
+    generate_type1_tension_axes,
     generate_type1_narrative_candidates,
 )
 
@@ -19,6 +22,91 @@ from dcf_engine.narrative_axes import (
 def test_rejects_empty_signature_inputs() -> None:
     with pytest.raises(ValueError, match="non-empty"):
         generate_narrative_axes(())
+
+
+def test_unanimous_same_direction_claim_pulls_do_not_produce_type1_axis() -> None:
+    pulls = (
+        ClaimAssumptionPull(claim_id="claim-1", assumption_id="revenue_cagr", pull=0.80),
+        ClaimAssumptionPull(claim_id="claim-2", assumption_id="revenue_cagr", pull=0.60),
+        ClaimAssumptionPull(claim_id="claim-3", assumption_id="operating_margin", pull=0.50),
+        ClaimAssumptionPull(claim_id="claim-4", assumption_id="operating_margin", pull=0.40),
+    )
+
+    axes = generate_type1_tension_axes(pulls, contested_mass_threshold=0.50)
+
+    assert axes == ()
+
+
+def test_assumption_stage_a_gate_requires_positive_and_negative_weighted_mass() -> None:
+    pulls = (
+        ClaimAssumptionPull(claim_id="growth-up", assumption_id="growth", pull=0.80),
+        ClaimAssumptionPull(claim_id="growth-down", assumption_id="growth", pull=-0.70),
+        ClaimAssumptionPull(claim_id="margin-up", assumption_id="margin", pull=0.90),
+        ClaimAssumptionPull(claim_id="margin-down", assumption_id="margin", pull=-0.49),
+        ClaimAssumptionPull(claim_id="wacc-up", assumption_id="wacc", pull=0.49),
+        ClaimAssumptionPull(claim_id="wacc-down", assumption_id="wacc", pull=-0.90),
+    )
+
+    results = evaluate_type1_assumption_mass_gates(
+        pulls,
+        contested_mass_threshold=0.50,
+    )
+
+    assert {result.assumption_id: result.passes for result in results} == {
+        "growth": True,
+        "margin": False,
+        "wacc": False,
+    }
+    growth = next(result for result in results if result.assumption_id == "growth")
+    assert growth.positive_mass == pytest.approx(0.80)
+    assert growth.negative_mass == pytest.approx(0.70)
+
+
+def test_centered_claim_by_assumption_matrix_recovers_bipolar_dominant_axis() -> None:
+    pulls = (
+        ClaimAssumptionPull(claim_id="optimistic-1", assumption_id="revenue_cagr", pull=2.0),
+        ClaimAssumptionPull(claim_id="optimistic-1", assumption_id="margin", pull=1.0),
+        ClaimAssumptionPull(claim_id="optimistic-1", assumption_id="wacc", pull=-1.0),
+        ClaimAssumptionPull(claim_id="optimistic-2", assumption_id="revenue_cagr", pull=1.0),
+        ClaimAssumptionPull(claim_id="optimistic-2", assumption_id="margin", pull=0.5),
+        ClaimAssumptionPull(claim_id="optimistic-2", assumption_id="wacc", pull=-0.5),
+        ClaimAssumptionPull(claim_id="pessimistic-1", assumption_id="revenue_cagr", pull=-1.0),
+        ClaimAssumptionPull(claim_id="pessimistic-1", assumption_id="margin", pull=-0.5),
+        ClaimAssumptionPull(claim_id="pessimistic-1", assumption_id="wacc", pull=0.5),
+        ClaimAssumptionPull(claim_id="pessimistic-2", assumption_id="revenue_cagr", pull=-2.0),
+        ClaimAssumptionPull(claim_id="pessimistic-2", assumption_id="margin", pull=-1.0),
+        ClaimAssumptionPull(claim_id="pessimistic-2", assumption_id="wacc", pull=1.0),
+    )
+
+    axes = generate_type1_tension_axes(pulls, contested_mass_threshold=1.0)
+
+    assert len(axes) == 1
+    assert axes[0].explained_variance_ratio == pytest.approx(1.0)
+    expected_scale = np.sqrt(6.0)
+    assert axes[0].loadings == pytest.approx(
+        {
+            "margin": 1.0 / expected_scale,
+            "revenue_cagr": 2.0 / expected_scale,
+            "wacc": -1.0 / expected_scale,
+        }
+    )
+
+
+def test_stage_c_rejects_axis_when_one_score_side_lacks_weighted_claim_mass() -> None:
+    pulls = (
+        ClaimAssumptionPull(claim_id="majority-1", assumption_id="revenue_cagr", pull=1.0),
+        ClaimAssumptionPull(claim_id="majority-2", assumption_id="revenue_cagr", pull=1.0),
+        ClaimAssumptionPull(
+            claim_id="thin-outlier",
+            assumption_id="revenue_cagr",
+            pull=-20.0,
+            weight=0.10,
+        ),
+    )
+
+    axes = generate_type1_tension_axes(pulls, contested_mass_threshold=0.50)
+
+    assert axes == ()
 
 
 def test_builds_signed_pull_signature_from_contested_evidence() -> None:
