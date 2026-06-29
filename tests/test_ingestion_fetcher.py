@@ -3,9 +3,15 @@ from __future__ import annotations
 import hashlib
 from collections.abc import Callable
 from datetime import date
+from pathlib import Path
 
 from dcf_engine.claim import SOURCE_RELIABILITY, SourceRef
-from dcf_engine.ingestion import EdgarRssFetcher, SourceDocument
+from dcf_engine.ingestion import (
+    EdgarRssFetcher,
+    ManualTranscriptLoader,
+    ReutersRssFetcher,
+    SourceDocument,
+)
 
 
 def _edgar_feed(entries: str) -> str:
@@ -45,6 +51,42 @@ def _reader(feed_text: str) -> Callable[[str], str]:
     def read(url: str) -> str:
         assert "CIK=NVDA" in url
         assert "output=atom" in url
+        return feed_text
+
+    return read
+
+
+def _rss_feed(items: str) -> str:
+    return f"""<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Reuters Business News</title>
+    {items}
+  </channel>
+</rss>
+"""
+
+
+def _rss_item(
+    *,
+    title: str,
+    link: str,
+    pub_date: str = "Tue, 24 Jun 2026 18:01:05 GMT",
+    description: str = "NVIDIA shares rose after analysts cited Blackwell demand.",
+) -> str:
+    return f"""
+    <item>
+      <title>{title}</title>
+      <link>{link}</link>
+      <pubDate>{pub_date}</pubDate>
+      <description>{description}</description>
+    </item>
+"""
+
+
+def _rss_reader(feed_text: str) -> Callable[[str], str]:
+    def read(url: str) -> str:
+        assert "reuters" in url.lower()
         return feed_text
 
     return read
@@ -194,3 +236,115 @@ def test_entry_with_unsupported_filing_type_is_skipped() -> None:
     docs = EdgarRssFetcher(reader=_reader(feed)).fetch_recent("8-K", count=10)
 
     assert docs == []
+
+
+def test_reuters_rss_returns_only_nvda_relevant_source_documents() -> None:
+    nvda_href = "https://www.reuters.com/technology/nvidia-blackwell-demand-2026-06-24/"
+    feed = _rss_feed(
+        _rss_item(
+            title="NVIDIA shares rise on Blackwell demand",
+            link=nvda_href,
+            description="<p>NVIDIA shares rose after analysts cited Blackwell demand.</p>",
+        )
+        + _rss_item(
+            title="Autos supplier cuts outlook",
+            link="https://www.reuters.com/business/autos-supplier-outlook-2026-06-24/",
+            description="Supplier shares fell after a weak guidance update.",
+        )
+    )
+
+    docs = ReutersRssFetcher(reader=_rss_reader(feed)).fetch()
+
+    assert docs == [
+        SourceDocument(
+            doc_id=hashlib.sha256(nvda_href.encode()).hexdigest()[:12],
+            url=nvda_href,
+            title="NVIDIA shares rise on Blackwell demand",
+            published_date=date(2026, 6, 24),
+            source_ref=SourceRef(
+                discovery_channel="rss_aggregator",
+                content_source="reuters",
+                source_reliability=SOURCE_RELIABILITY["reuters"],
+            ),
+            raw_text="NVIDIA shares rose after analysts cited Blackwell demand.",
+        )
+    ]
+
+
+def test_reuters_rss_skips_empty_malformed_non_nvda_and_incomplete_entries() -> None:
+    valid_href = "https://www.reuters.com/technology/nvda-valid-2026-06-24/"
+    feed = _rss_feed(
+        """
+    <item>
+      <title>NVIDIA item missing link</title>
+      <pubDate>Tue, 24 Jun 2026 18:01:05 GMT</pubDate>
+      <description>NVIDIA should be skipped without a URL.</description>
+    </item>
+    <item>
+      <title>NVIDIA item with invalid date</title>
+      <link>https://www.reuters.com/technology/nvda-invalid-date-2026-06-24/</link>
+      <pubDate>not a date</pubDate>
+      <description>NVIDIA should be skipped without a valid date.</description>
+    </item>
+    <item>
+      <title>NVIDIA item with empty text</title>
+      <link>https://www.reuters.com/technology/nvda-empty-2026-06-24/</link>
+      <pubDate>Tue, 24 Jun 2026 18:01:05 GMT</pubDate>
+      <description>   </description>
+    </item>
+"""
+        + _rss_item(
+            title="Chip equipment maker raises forecast",
+            link="https://www.reuters.com/technology/chip-equipment-2026-06-24/",
+            description="Semiconductor equipment demand improved.",
+        )
+        + _rss_item(
+            title="NVDA expands data center supply",
+            link=valid_href,
+            description="NVDA expanded data center supply after Blackwell demand increased.",
+        )
+    )
+
+    docs = ReutersRssFetcher(reader=_rss_reader(feed)).fetch()
+
+    assert [doc.url for doc in docs] == [valid_href]
+
+
+def test_reuters_malformed_feed_returns_no_documents() -> None:
+    docs = ReutersRssFetcher(reader=_rss_reader("<rss><channel>")).fetch()
+
+    assert docs == []
+
+
+def test_manual_transcript_loader_builds_earnings_call_source_document(tmp_path: Path) -> None:
+    transcript_path = tmp_path / "nvda-fy2027-q1.txt"
+    transcript_path.write_text(
+        "  Operator: Welcome to NVIDIA's call.\n\n"
+        " Jensen Huang: Blackwell demand is very strong.  \n",
+    )
+    source_url = "file://nvda-fy2027-q1-transcript"
+
+    docs = ManualTranscriptLoader(
+        path=transcript_path,
+        title=" NVIDIA FY2027 Q1 earnings call transcript ",
+        published_date=date(2026, 5, 27),
+        source_url=source_url,
+    ).fetch()
+
+    assert docs == [
+        SourceDocument(
+            doc_id=hashlib.sha256(f"{source_url}|2026-05-27".encode()).hexdigest()[:12],
+            url=source_url,
+            title="NVIDIA FY2027 Q1 earnings call transcript",
+            published_date=date(2026, 5, 27),
+            source_ref=SourceRef(
+                discovery_channel="direct",
+                content_source="earnings_call",
+                source_reliability=SOURCE_RELIABILITY["earnings_call"],
+            ),
+            raw_text=(
+                "Operator: Welcome to NVIDIA's call. "
+                "Jensen Huang: Blackwell demand is very strong."
+            ),
+        )
+    ]
