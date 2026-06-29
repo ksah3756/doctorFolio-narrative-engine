@@ -48,6 +48,8 @@ done
 [[ "$issue" =~ ^[0-9]+$ ]] || die "--issue must be a number"
 [[ "$branch" =~ ^feat/${issue}-[a-z0-9][a-z0-9-]*$ ]] || die "branch must match feat/${issue}-slug"
 [[ -f "$prompt_file" ]] || die "prompt file not found: $prompt_file"
+prompt_dir="$(cd "$(dirname "$prompt_file")" && pwd -P)" || die "cannot resolve prompt dir: $prompt_file"
+prompt_file="$prompt_dir/$(basename "$prompt_file")"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="${AUTO_LOOP_PROJECT_DIR:-$(cd "$SCRIPT_DIR/.." && pwd)}"
