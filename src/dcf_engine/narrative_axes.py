@@ -16,6 +16,7 @@ from dcf_engine.narrative import Narrative, NarrativeContainer
 DEFAULT_EXPLAINED_VARIANCE_THRESHOLD: Final = 0.80
 DEFAULT_MAX_AXES: Final = 3
 DEFAULT_TYPE1_SHIFT_STRENGTH: Final = 1.0
+DEFAULT_CONTESTED_MASS_THRESHOLD: Final = 1.0
 ZERO_VARIANCE_TOLERANCE: Final = 1e-12
 
 type PullVector = Sequence[float] | NDArray[np.float64]
@@ -37,6 +38,16 @@ class EvidencePull:
 
 
 @dataclass(frozen=True)
+class ClaimAssumptionPull:
+    claim_id: str
+    assumption_id: str
+    pull: float
+    weight: float = 1.0
+    lifecycle_stage: LifecycleStage = "growth"
+    tam_structure: TamStructure = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
 class ContestedAssumptionPullInput:
     assumption_id: str
     supporting: Sequence[EvidencePull]
@@ -50,6 +61,14 @@ class NarrativeAxis:
     axis_index: int
     explained_variance_ratio: float
     loadings: Mapping[str, float]
+
+
+@dataclass(frozen=True)
+class AssumptionMassGateResult:
+    assumption_id: str
+    positive_mass: float
+    negative_mass: float
+    passes: bool
 
 
 def build_pull_signature(contested: ContestedAssumptionPullInput) -> PullSignature:
@@ -117,6 +136,120 @@ def generate_type1_narrative_candidates(
     )
 
 
+def evaluate_type1_assumption_mass_gates(
+    pulls: Sequence[ClaimAssumptionPull],
+    *,
+    contested_mass_threshold: float = DEFAULT_CONTESTED_MASS_THRESHOLD,
+) -> tuple[AssumptionMassGateResult, ...]:
+    """Evaluate the Stage A bipolar mass gate for each assumption."""
+
+    _validate_contested_mass_threshold(contested_mass_threshold)
+    ordered_pulls = _ordered_claim_assumption_pulls(pulls)
+    masses: dict[str, list[float]] = {}
+    for pull in ordered_pulls:
+        weighted_pull = _weighted_claim_assumption_pull(pull)
+        positive_mass, negative_mass = masses.setdefault(pull.assumption_id, [0.0, 0.0])
+        if weighted_pull > 0.0:
+            positive_mass += weighted_pull
+        elif weighted_pull < 0.0:
+            negative_mass += abs(weighted_pull)
+        masses[pull.assumption_id] = [positive_mass, negative_mass]
+
+    return tuple(
+        AssumptionMassGateResult(
+            assumption_id=assumption_id,
+            positive_mass=positive_mass,
+            negative_mass=negative_mass,
+            passes=(
+                positive_mass >= contested_mass_threshold
+                and negative_mass >= contested_mass_threshold
+            ),
+        )
+        for assumption_id, (positive_mass, negative_mass) in sorted(masses.items())
+    )
+
+
+def generate_type1_tension_axes(
+    pulls: Sequence[ClaimAssumptionPull],
+    *,
+    contested_mass_threshold: float = DEFAULT_CONTESTED_MASS_THRESHOLD,
+    explained_variance_threshold: float = DEFAULT_EXPLAINED_VARIANCE_THRESHOLD,
+    max_axes: int = DEFAULT_MAX_AXES,
+) -> tuple[NarrativeAxis, ...]:
+    """Generate v6.1 Type-1 axes from gated, centered claim-by-assumption pulls."""
+
+    _validate_axis_controls(
+        explained_variance_threshold=explained_variance_threshold,
+        max_axes=max_axes,
+    )
+    _validate_contested_mass_threshold(contested_mass_threshold)
+    ordered_pulls = _ordered_claim_assumption_pulls(pulls)
+    gate_results = evaluate_type1_assumption_mass_gates(
+        ordered_pulls,
+        contested_mass_threshold=contested_mass_threshold,
+    )
+    retained_assumption_ids = tuple(
+        result.assumption_id for result in gate_results if result.passes
+    )
+    if not retained_assumption_ids:
+        return ()
+
+    matrix, claim_ids, assumption_ids = _centered_claim_assumption_matrix(
+        ordered_pulls,
+        retained_assumption_ids,
+    )
+    if matrix.size == 0:
+        return ()
+
+    _, singular_values, right_singular_vectors = np.linalg.svd(
+        matrix,
+        full_matrices=False,
+    )
+    variances = np.square(singular_values)
+    positive_variance_mask = variances > ZERO_VARIANCE_TOLERANCE
+    positive_variances = variances[positive_variance_mask]
+    if positive_variances.size == 0:
+        return ()
+
+    total_variance = float(np.sum(positive_variances))
+    explained_variance_ratios = positive_variances / total_variance
+    candidate_axis_count = min(
+        _axis_count_for_threshold(explained_variance_ratios, explained_variance_threshold),
+        max_axes,
+    )
+    claim_weights = _claim_weights_by_id(ordered_pulls)
+
+    axes: list[NarrativeAxis] = []
+    positive_component_indexes = np.flatnonzero(positive_variance_mask)
+    for variance_index, component_index in enumerate(positive_component_indexes):
+        loadings = _deterministic_loadings(
+            assumption_ids,
+            right_singular_vectors[component_index, :],
+        )
+        loading_vector = np.asarray(
+            [loadings[assumption_id] for assumption_id in assumption_ids],
+            dtype=np.float64,
+        )
+        scores = matrix @ loading_vector
+        if not _passes_axis_bipolar_mass_gate(
+            claim_ids=claim_ids,
+            claim_weights=claim_weights,
+            scores=scores,
+            contested_mass_threshold=contested_mass_threshold,
+        ):
+            continue
+        axes.append(
+            NarrativeAxis(
+                axis_index=len(axes),
+                explained_variance_ratio=float(explained_variance_ratios[variance_index]),
+                loadings=loadings,
+            )
+        )
+        if len(axes) >= candidate_axis_count:
+            break
+    return tuple(axes)
+
+
 def generate_narrative_axes(
     signatures: Sequence[PullSignature],
     *,
@@ -178,6 +311,11 @@ def _validate_axis_controls(
         raise ValueError("max_axes must be at least 1")
 
 
+def _validate_contested_mass_threshold(contested_mass_threshold: float) -> None:
+    if not np.isfinite(contested_mass_threshold) or contested_mass_threshold <= 0.0:
+        raise ValueError("contested_mass_threshold must be finite and positive")
+
+
 def _signed_evidence_items(
     contested: ContestedAssumptionPullInput,
 ) -> tuple[tuple[float, EvidencePull], ...]:
@@ -225,6 +363,45 @@ def _ordered_signatures(signatures: Sequence[PullSignature]) -> tuple[PullSignat
     return tuple(sorted(signatures, key=lambda signature: signature.assumption_id))
 
 
+def _ordered_claim_assumption_pulls(
+    pulls: Sequence[ClaimAssumptionPull],
+) -> tuple[ClaimAssumptionPull, ...]:
+    if not pulls:
+        raise ValueError("claim-assumption pulls must be non-empty")
+
+    seen_cells: set[tuple[str, str]] = set()
+    claim_weights: dict[str, float] = {}
+    first_pull = pulls[0]
+    lifecycle_stage = first_pull.lifecycle_stage
+    tam_structure = first_pull.tam_structure
+
+    for pull in pulls:
+        if not pull.claim_id.strip():
+            raise ValueError("claim_id must be non-empty")
+        if not pull.assumption_id.strip():
+            raise ValueError("assumption_id must be non-empty")
+        if not np.isfinite(pull.pull):
+            raise ValueError("claim-assumption pull values must be finite")
+        if not np.isfinite(pull.weight) or pull.weight <= 0.0:
+            raise ValueError("claim-assumption pull weights must be finite and positive")
+        if pull.lifecycle_stage != lifecycle_stage or pull.tam_structure != tam_structure:
+            raise ValueError(
+                "claim-assumption pulls must share one measurement axis "
+                "(same lifecycle_stage and tam_structure)"
+            )
+
+        cell = (pull.claim_id, pull.assumption_id)
+        if cell in seen_cells:
+            raise ValueError("claim-assumption pulls must be unique per claim and assumption")
+        seen_cells.add(cell)
+
+        existing_weight = claim_weights.setdefault(pull.claim_id, pull.weight)
+        if existing_weight != pull.weight:
+            raise ValueError("claim-assumption pull weights must be consistent per claim")
+
+    return tuple(sorted(pulls, key=lambda pull: (pull.assumption_id, pull.claim_id)))
+
+
 def _signature_matrix(signatures: Sequence[PullSignature]) -> NDArray[np.float64]:
     first_values = _signature_array(signatures[0])
     expected_shape = first_values.shape
@@ -237,6 +414,70 @@ def _signature_matrix(signatures: Sequence[PullSignature]) -> NDArray[np.float64
         rows.append(values)
 
     return np.vstack(rows)
+
+
+def _centered_claim_assumption_matrix(
+    pulls: Sequence[ClaimAssumptionPull],
+    retained_assumption_ids: Sequence[str],
+) -> tuple[NDArray[np.float64], tuple[str, ...], tuple[str, ...]]:
+    retained_assumptions = set(retained_assumption_ids)
+    retained_pulls = tuple(
+        pull for pull in pulls if pull.assumption_id in retained_assumptions
+    )
+    if not retained_pulls:
+        empty = np.empty((0, 0), dtype=np.float64)
+        return empty, (), ()
+
+    claim_ids = tuple(sorted({pull.claim_id for pull in retained_pulls}))
+    assumption_ids = tuple(sorted(retained_assumptions))
+    claim_index = {claim_id: index for index, claim_id in enumerate(claim_ids)}
+    assumption_index = {
+        assumption_id: index for index, assumption_id in enumerate(assumption_ids)
+    }
+    matrix = np.zeros((len(claim_ids), len(assumption_ids)), dtype=np.float64)
+
+    for pull in retained_pulls:
+        matrix[claim_index[pull.claim_id], assumption_index[pull.assumption_id]] = (
+            _weighted_claim_assumption_pull(pull)
+        )
+
+    return matrix - np.mean(matrix, axis=0, keepdims=True), claim_ids, assumption_ids
+
+
+def _weighted_claim_assumption_pull(pull: ClaimAssumptionPull) -> float:
+    weighted_pull = pull.pull * pull.weight
+    if not np.isfinite(weighted_pull):
+        raise ValueError("weighted claim-assumption pull values must be finite")
+    return float(weighted_pull)
+
+
+def _claim_weights_by_id(
+    pulls: Sequence[ClaimAssumptionPull],
+) -> dict[str, float]:
+    weights: dict[str, float] = {}
+    for pull in pulls:
+        weights[pull.claim_id] = pull.weight
+    return weights
+
+
+def _passes_axis_bipolar_mass_gate(
+    *,
+    claim_ids: Sequence[str],
+    claim_weights: Mapping[str, float],
+    scores: NDArray[np.float64],
+    contested_mass_threshold: float,
+) -> bool:
+    positive_mass = 0.0
+    negative_mass = 0.0
+    for claim_id, score in zip(claim_ids, scores, strict=True):
+        if score > ZERO_VARIANCE_TOLERANCE:
+            positive_mass += claim_weights[claim_id]
+        elif score < -ZERO_VARIANCE_TOLERANCE:
+            negative_mass += claim_weights[claim_id]
+    return (
+        positive_mass >= contested_mass_threshold
+        and negative_mass >= contested_mass_threshold
+    )
 
 
 def _signature_array(signature: PullSignature) -> NDArray[np.float64]:
