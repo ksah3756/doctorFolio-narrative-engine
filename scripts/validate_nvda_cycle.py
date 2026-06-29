@@ -15,7 +15,7 @@ from dcf_engine.validate_cycle import (
     run_validation_cycle,
 )
 
-DEFAULT_DATA_DIR: Final[Path] = Path("data/nvda")
+DEFAULT_DATA_DIR: Final[Path] = Path("data")
 DEFAULT_STAGE: Final[LifecycleStage] = "growth"
 LIFECYCLE_STAGE_CHOICES: Final[tuple[LifecycleStage, ...]] = (
     "young",
