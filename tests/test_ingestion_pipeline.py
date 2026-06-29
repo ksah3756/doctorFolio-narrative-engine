@@ -4,11 +4,10 @@ from collections.abc import Iterable
 from datetime import date
 from pathlib import Path
 
-from dcf_engine.ingestion.pipeline import run_ingestion_pipeline
-
 from dcf_engine.claim import SOURCE_RELIABILITY, Claim, ExtractionQuality, SourceRef
 from dcf_engine.extraction.client import ExtractionResponse, TokenUsage
 from dcf_engine.ingestion import JsonClaimStore, SourceDocument
+from dcf_engine.ingestion.pipeline import run_ingestion_pipeline
 
 
 class FixtureFetcher:
