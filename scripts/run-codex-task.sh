@@ -172,7 +172,7 @@ run_review_codex() {
     args+=(--ignore-user-config)
   fi
   args+=(
-    --cd "$PROJECT_DIR"
+    --cd "$worktree_dir"
     --sandbox read-only
     --ephemeral
     -c 'model_reasoning_effort="high"'
@@ -386,7 +386,7 @@ run_implementation() {
   write_status "running" 0 "codex"
 
   "$CODEX_BIN" --ask-for-approval never exec \
-    --cd "$PROJECT_DIR" \
+    --cd "$worktree_dir" \
     --sandbox workspace-write \
     -c "$git_writable_root" \
     -c 'model_reasoning_effort="high"' \
@@ -427,23 +427,16 @@ run_implementation() {
   fi
 }
 
-cd "$PROJECT_DIR" || die "cannot enter project: $PROJECT_DIR"
+# 공유 PROJECT_DIR 체크아웃을 git switch로 옮기면 병렬 auto-loop 세션이 같은
+# 체크아웃을 두고 경쟁한다(#76). 이슈별 전용 worktree에서 작업하도록 격리한다.
+# (.auto-loop 메타데이터·로그·STATE_FILE은 절대경로 $PROJECT_DIR 기준이므로 그대로 유지된다.)
+# shellcheck source=lib/worktree.sh
+source "$SCRIPT_DIR/lib/worktree.sh"
 
-git fetch origin --quiet 2>/dev/null || true
-current_branch="$(git branch --show-current)"
-if [[ "$current_branch" != "$branch" ]]; then
-  if git show-ref --verify --quiet "refs/heads/$branch"; then
-    git switch "$branch" || die "cannot switch to existing branch: $branch"
-  else
-    # 신규 작업 브랜치는 최신 origin/main에서 분기한다 (stale HEAD 분기로 인한 충돌 방지).
-    # origin/main이 없으면(원격 미설정/테스트 레포) 현재 HEAD에서 분기로 폴백한다.
-    if git rev-parse --verify --quiet origin/main >/dev/null 2>&1; then
-      git switch -c "$branch" origin/main || die "cannot create branch from origin/main: $branch"
-    else
-      git switch -c "$branch" || die "cannot create branch: $branch"
-    fi
-  fi
-fi
+git -C "$PROJECT_DIR" fetch origin --quiet 2>/dev/null || true
+worktree_dir="$(resolve_task_worktree "$PROJECT_DIR" "$branch")" \
+  || die "cannot resolve worktree for branch: $branch"
+cd "$worktree_dir" || die "cannot enter worktree: $worktree_dir"
 
 # workspace-write 샌드박스는 기본적으로 `!**/.git/**`로 .git을 read-only로 막아
 # Codex 커밋이 EPERM으로 실패한다(#9·#11·#14 재발). 프로젝트 .git을 명시적으로
