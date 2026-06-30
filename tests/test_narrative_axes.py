@@ -16,6 +16,7 @@ from dcf_engine.narrative_axes import (
     generate_narrative_axes,
     generate_type1_narrative_candidates,
     generate_type1_tension_axes,
+    _centered_claim_assumption_matrix,
 )
 
 
@@ -107,6 +108,58 @@ def test_stage_c_rejects_axis_when_one_score_side_lacks_weighted_claim_mass() ->
     axes = generate_type1_tension_axes(pulls, contested_mass_threshold=0.50)
 
     assert axes == ()
+
+
+def test_conditional_pull_enters_matrix_at_discounted_value() -> None:
+    pulls = (
+        ClaimAssumptionPull(
+            claim_id="conditional-up",
+            assumption_id="margin",
+            pull=1.0,
+            is_conditional=True,
+        ),
+        ClaimAssumptionPull(claim_id="realized-down", assumption_id="margin", pull=-0.5),
+    )
+
+    matrix, claim_ids, assumption_ids = _centered_claim_assumption_matrix(pulls, ("margin",))
+
+    assert claim_ids == ("conditional-up", "realized-down")
+    assert assumption_ids == ("margin",)
+    assert matrix[0, 0] == pytest.approx(0.5)
+    assert matrix[1, 0] == pytest.approx(-0.5)
+
+
+def test_unconditional_pull_enters_matrix_at_face_value() -> None:
+    pulls = (
+        ClaimAssumptionPull(claim_id="realized-up", assumption_id="margin", pull=1.0),
+        ClaimAssumptionPull(claim_id="realized-down", assumption_id="margin", pull=-1.0),
+    )
+
+    matrix, claim_ids, assumption_ids = _centered_claim_assumption_matrix(pulls, ("margin",))
+
+    assert claim_ids == ("realized-down", "realized-up")
+    assert assumption_ids == ("margin",)
+    assert matrix[1, 0] == pytest.approx(1.0)
+    assert matrix[0, 0] == pytest.approx(-1.0)
+
+
+def test_mixed_conditional_set_produces_correctly_discounted_matrix() -> None:
+    pulls = (
+        ClaimAssumptionPull(
+            claim_id="conditional",
+            assumption_id="margin",
+            pull=1.0,
+            is_conditional=True,
+        ),
+        ClaimAssumptionPull(claim_id="realized", assumption_id="margin", pull=1.0),
+    )
+
+    matrix, claim_ids, assumption_ids = _centered_claim_assumption_matrix(pulls, ("margin",))
+
+    assert claim_ids == ("conditional", "realized")
+    assert assumption_ids == ("margin",)
+    assert matrix[0, 0] == pytest.approx(-0.25)
+    assert matrix[1, 0] == pytest.approx(0.25)
 
 
 def test_builds_signed_pull_signature_from_contested_evidence() -> None:
