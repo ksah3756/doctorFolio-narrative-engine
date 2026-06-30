@@ -56,6 +56,35 @@ def _filing_html(body: str = "NVIDIA filed a full current report body.") -> str:
 """
 
 
+def _filing_index_html(primary_document_href: str) -> str:
+    return f"""<!doctype html>
+<html>
+  <head><title>SEC Filing Detail</title></head>
+  <body>
+    <table class="tableFile" summary="Document Format Files">
+      <tr>
+        <th>Seq</th><th>Description</th><th>Document</th><th>Type</th><th>Size</th>
+      </tr>
+      <tr>
+        <td>1</td>
+        <td>FORM 8-K</td>
+        <td><a href="{primary_document_href}">nvda-20260624.htm</a></td>
+        <td>8-K</td>
+        <td>51234</td>
+      </tr>
+      <tr>
+        <td>2</td>
+        <td>EX-99.1</td>
+        <td><a href="/Archives/edgar/data/1045810/exhibit991.htm">exhibit991.htm</a></td>
+        <td>EX-99.1</td>
+        <td>12345</td>
+      </tr>
+    </table>
+  </body>
+</html>
+"""
+
+
 def _reader(
     feed_text: str,
     filing_texts: dict[str, str] | None = None,
@@ -301,6 +330,54 @@ def test_edgar_fetches_entry_link_after_feed_and_uses_filing_body_text() -> None
     assert doc.raw_text == (
         "Filing document Item 8.01 Other Events NVIDIA disclosed Blackwell supply "
         "commitments in the full filing body."
+    )
+
+
+def test_edgar_index_entry_resolves_primary_document_before_extracting_text() -> None:
+    index_href = (
+        "https://www.sec.gov/Archives/edgar/data/1045810/"
+        "000104581026000129/0001045810-26-000129-index.htm"
+    )
+    document_href = (
+        "https://www.sec.gov/Archives/edgar/data/1045810/"
+        "000104581026000129/nvda-20260624.htm"
+    )
+    calls: list[str] = []
+    feed = _edgar_feed(
+        _entry(
+            title="8-K - NVIDIA CORP (0001045810) (Filer)",
+            href=index_href,
+            filing_type="8-K",
+            summary="Short Atom summary.",
+        )
+    )
+    filing_body = _filing_html(
+        "<main><p>NVIDIA disclosed Blackwell platform supply terms in the primary 8-K.</p></main>"
+    )
+
+    [doc] = EdgarRssFetcher(
+        reader=_reader(
+            feed,
+            {
+                index_href: _filing_index_html(
+                    "/Archives/edgar/data/1045810/000104581026000129/nvda-20260624.htm"
+                ),
+                document_href: filing_body,
+            },
+            calls,
+        )
+    ).fetch_recent("8-K", count=1)
+
+    assert calls == [
+        "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=NVDA&type=8-K&dateb=&owner=include&count=1&search_text=&output=atom",
+        index_href,
+        document_href,
+    ]
+    assert doc.url == document_href
+    assert doc.doc_id == hashlib.sha256(document_href.encode()).hexdigest()[:12]
+    assert "Document Format Files" not in doc.raw_text
+    assert doc.raw_text == (
+        "Filing document NVIDIA disclosed Blackwell platform supply terms in the primary 8-K."
     )
 
 
