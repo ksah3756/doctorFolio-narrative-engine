@@ -17,6 +17,7 @@ DEFAULT_EXPLAINED_VARIANCE_THRESHOLD: Final = 0.80
 DEFAULT_MAX_AXES: Final = 3
 DEFAULT_TYPE1_SHIFT_STRENGTH: Final = 1.0
 DEFAULT_CONTESTED_MASS_THRESHOLD: Final = 1.0
+CONDITIONAL_PULL_DISCOUNT: Final = 0.5
 ZERO_VARIANCE_TOLERANCE: Final = 1e-12
 
 type PullVector = Sequence[float] | NDArray[np.float64]
@@ -43,6 +44,7 @@ class ClaimAssumptionPull:
     assumption_id: str
     pull: float
     weight: float = 1.0
+    is_conditional: bool = False
     lifecycle_stage: LifecycleStage = "growth"
     tam_structure: TamStructure = field(default_factory=dict)
 
@@ -445,7 +447,8 @@ def _centered_claim_assumption_matrix(
 
 
 def _weighted_claim_assumption_pull(pull: ClaimAssumptionPull) -> float:
-    weighted_pull = pull.pull * pull.weight
+    discount = CONDITIONAL_PULL_DISCOUNT if pull.is_conditional else 1.0
+    weighted_pull = pull.pull * pull.weight * discount
     if not np.isfinite(weighted_pull):
         raise ValueError("weighted claim-assumption pull values must be finite")
     return float(weighted_pull)
