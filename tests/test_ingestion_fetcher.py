@@ -47,11 +47,58 @@ def _entry(
 """
 
 
-def _reader(feed_text: str) -> Callable[[str], str]:
+def _filing_html(body: str = "NVIDIA filed a full current report body.") -> str:
+    return f"""<!doctype html>
+<html>
+  <head><title>Filing document</title></head>
+  <body>{body}</body>
+</html>
+"""
+
+
+def _filing_index_html(primary_document_href: str) -> str:
+    return f"""<!doctype html>
+<html>
+  <head><title>SEC Filing Detail</title></head>
+  <body>
+    <table class="tableFile" summary="Document Format Files">
+      <tr>
+        <th>Seq</th><th>Description</th><th>Document</th><th>Type</th><th>Size</th>
+      </tr>
+      <tr>
+        <td>1</td>
+        <td>FORM 8-K</td>
+        <td><a href="{primary_document_href}">nvda-20260624.htm</a></td>
+        <td>8-K</td>
+        <td>51234</td>
+      </tr>
+      <tr>
+        <td>2</td>
+        <td>EX-99.1</td>
+        <td><a href="/Archives/edgar/data/1045810/exhibit991.htm">exhibit991.htm</a></td>
+        <td>EX-99.1</td>
+        <td>12345</td>
+      </tr>
+    </table>
+  </body>
+</html>
+"""
+
+
+def _reader(
+    feed_text: str,
+    filing_texts: dict[str, str] | None = None,
+    calls: list[str] | None = None,
+) -> Callable[[str], str]:
     def read(url: str) -> str:
-        assert "CIK=NVDA" in url
-        assert "output=atom" in url
-        return feed_text
+        if calls is not None:
+            calls.append(url)
+        if "output=atom" in url:
+            assert "CIK=NVDA" in url
+            return feed_text
+        if filing_texts is not None and url in filing_texts:
+            return filing_texts[url]
+        raise AssertionError(f"unexpected URL read: {url}")
 
     return read
 
@@ -102,7 +149,9 @@ def test_nvda_8k_rss_entry_parses_into_source_document() -> None:
         )
     )
 
-    docs = EdgarRssFetcher(reader=_reader(feed)).fetch_recent("8-K", count=10)
+    docs = EdgarRssFetcher(
+        reader=_reader(feed, {href: _filing_html("NVIDIA filed a full current report body.")})
+    ).fetch_recent("8-K", count=10)
 
     assert docs == [
         SourceDocument(
@@ -115,7 +164,7 @@ def test_nvda_8k_rss_entry_parses_into_source_document() -> None:
                 content_source="8-K",
                 source_reliability=SOURCE_RELIABILITY["8-K"],
             ),
-            raw_text="NVIDIA filed a current report for material corporate events.",
+            raw_text="Filing document NVIDIA filed a full current report body.",
         )
     ]
 
@@ -130,7 +179,9 @@ def test_doc_id_is_deterministic_sha256_url_prefix() -> None:
         )
     )
 
-    [doc] = EdgarRssFetcher(reader=_reader(feed)).fetch_recent("10-Q", count=1)
+    [doc] = EdgarRssFetcher(
+        reader=_reader(feed, {href: _filing_html("NVIDIA filed a full quarterly report body.")})
+    ).fetch_recent("10-Q", count=1)
 
     assert doc.doc_id == hashlib.sha256(href.encode()).hexdigest()[:12]
 
@@ -145,29 +196,41 @@ def test_content_source_and_reliability_follow_claim_source_table() -> None:
         )
     )
 
-    [doc] = EdgarRssFetcher(reader=_reader(feed)).fetch_recent("10-K", count=1)
+    [doc] = EdgarRssFetcher(
+        reader=_reader(feed, {href: _filing_html("NVIDIA filed a full annual report body.")})
+    ).fetch_recent("10-K", count=1)
 
     assert doc.source_ref.content_source == "10-K"
     assert doc.source_ref.source_reliability == SOURCE_RELIABILITY["10-K"]
 
 
 def test_fetch_recent_honors_count_and_preserves_fixture_order() -> None:
+    first_href = "https://www.sec.gov/Archives/edgar/data/1045810/first.htm"
+    second_href = "https://www.sec.gov/Archives/edgar/data/1045810/second.htm"
     feed = _edgar_feed(
         _entry(
             title="8-K - first",
-            href="https://www.sec.gov/Archives/edgar/data/1045810/first.htm",
+            href=first_href,
             filing_type="8-K",
             updated="2026-06-25T09:00:00-04:00",
         )
         + _entry(
             title="8-K - second",
-            href="https://www.sec.gov/Archives/edgar/data/1045810/second.htm",
+            href=second_href,
             filing_type="8-K",
             updated="2026-06-24T09:00:00-04:00",
         )
     )
 
-    docs = EdgarRssFetcher(reader=_reader(feed)).fetch_recent("8-K", count=1)
+    docs = EdgarRssFetcher(
+        reader=_reader(
+            feed,
+            {
+                first_href: _filing_html("First filing body."),
+                second_href: _filing_html("Second filing body."),
+            },
+        )
+    ).fetch_recent("8-K", count=1)
 
     assert [doc.title for doc in docs] == ["8-K - first"]
 
@@ -190,7 +253,9 @@ def test_malformed_entries_do_not_produce_invalid_documents() -> None:
         )
     )
 
-    docs = EdgarRssFetcher(reader=_reader(feed)).fetch_recent("8-K", count=10)
+    docs = EdgarRssFetcher(
+        reader=_reader(feed, {valid_href: _filing_html("Valid filing body.")})
+    ).fetch_recent("8-K", count=10)
 
     assert len(docs) == 1
     assert docs[0].url == valid_href
@@ -236,6 +301,181 @@ def test_entry_with_unsupported_filing_type_is_skipped() -> None:
     docs = EdgarRssFetcher(reader=_reader(feed)).fetch_recent("8-K", count=10)
 
     assert docs == []
+
+
+def test_edgar_fetches_entry_link_after_feed_and_uses_filing_body_text() -> None:
+    href = "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000126/nvda-8k.htm"
+    calls: list[str] = []
+    feed = _edgar_feed(
+        _entry(
+            title="8-K - NVIDIA CORP (0001045810) (Filer)",
+            href=href,
+            filing_type="8-K",
+            summary="Short Atom summary.",
+        )
+    )
+    filing_body = _filing_html(
+        "<main><h1>Item 8.01 Other Events</h1>"
+        "<p>NVIDIA disclosed Blackwell supply commitments in the full filing body.</p></main>"
+    )
+
+    [doc] = EdgarRssFetcher(reader=_reader(feed, {href: filing_body}, calls)).fetch_recent(
+        "8-K", count=1
+    )
+
+    assert calls == [
+        "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=NVDA&type=8-K&dateb=&owner=include&count=1&search_text=&output=atom",
+        href,
+    ]
+    assert doc.raw_text == (
+        "Filing document Item 8.01 Other Events NVIDIA disclosed Blackwell supply "
+        "commitments in the full filing body."
+    )
+
+
+def test_edgar_index_entry_resolves_primary_document_before_extracting_text() -> None:
+    index_href = (
+        "https://www.sec.gov/Archives/edgar/data/1045810/"
+        "000104581026000129/0001045810-26-000129-index.htm"
+    )
+    document_href = (
+        "https://www.sec.gov/Archives/edgar/data/1045810/"
+        "000104581026000129/nvda-20260624.htm"
+    )
+    calls: list[str] = []
+    feed = _edgar_feed(
+        _entry(
+            title="8-K - NVIDIA CORP (0001045810) (Filer)",
+            href=index_href,
+            filing_type="8-K",
+            summary="Short Atom summary.",
+        )
+    )
+    filing_body = _filing_html(
+        "<main><p>NVIDIA disclosed Blackwell platform supply terms in the primary 8-K.</p></main>"
+    )
+
+    [doc] = EdgarRssFetcher(
+        reader=_reader(
+            feed,
+            {
+                index_href: _filing_index_html(
+                    "/Archives/edgar/data/1045810/000104581026000129/nvda-20260624.htm"
+                ),
+                document_href: filing_body,
+            },
+            calls,
+        )
+    ).fetch_recent("8-K", count=1)
+
+    assert calls == [
+        "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=NVDA&type=8-K&dateb=&owner=include&count=1&search_text=&output=atom",
+        index_href,
+        document_href,
+    ]
+    assert doc.url == document_href
+    assert doc.doc_id == hashlib.sha256(document_href.encode()).hexdigest()[:12]
+    assert "Document Format Files" not in doc.raw_text
+    assert doc.raw_text == (
+        "Filing document NVIDIA disclosed Blackwell platform supply terms in the primary 8-K."
+    )
+
+
+def test_edgar_filing_html_xbrl_scripts_styles_entities_and_whitespace_are_normalized() -> None:
+    href = "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000127/nvda-10q.htm"
+    feed = _edgar_feed(
+        _entry(
+            title="10-Q - NVIDIA CORP (0001045810) (Filer)",
+            href=href,
+            filing_type="10-Q",
+        )
+    )
+    filing_body = """<!doctype html>
+<html>
+  <head>
+    <title>NVIDIA 10-Q</title>
+    <style>.hidden { display: none; } Hidden Style Text</style>
+    <script>window.secret = "remove script text";</script>
+  </head>
+  <body>
+    <ix:nonNumeric name="dei:DocumentType">FORM 10-Q</ix:nonNumeric>
+    <p>Revenue&nbsp;&amp;&nbsp;gross margin
+       increased with Blackwell&nbsp;systems.</p>
+  </body>
+</html>
+"""
+
+    [doc] = EdgarRssFetcher(reader=_reader(feed, {href: filing_body})).fetch_recent(
+        "10-Q", count=1
+    )
+
+    assert doc.raw_text == (
+        "NVIDIA 10-Q FORM 10-Q Revenue & gross margin increased with Blackwell systems."
+    )
+    assert "Hidden Style Text" not in doc.raw_text
+    assert "remove script text" not in doc.raw_text
+    assert "<ix:nonNumeric" not in doc.raw_text
+
+
+def test_edgar_filing_body_is_materially_longer_than_atom_summary_and_keeps_body_keywords() -> None:
+    href = "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000128/nvda-8k.htm"
+    summary = "Short Atom blurb."
+    body_only_phrase = "contractual Blackwell supply allocations and liquid cooling readiness"
+    feed = _edgar_feed(
+        _entry(
+            title="8-K - NVIDIA CORP (0001045810) (Filer)",
+            href=href,
+            filing_type="8-K",
+            summary=summary,
+        )
+    )
+    filing_body = _filing_html(
+        " ".join(
+            [
+                "<article><p>NVIDIA filed this full Form 8-K to describe operational updates.",
+                "Management discussed data center demand, customer concentration,",
+                body_only_phrase,
+                "across several paragraphs that do not appear in the Atom summary.</p></article>",
+            ]
+        )
+    )
+
+    [doc] = EdgarRssFetcher(reader=_reader(feed, {href: filing_body})).fetch_recent(
+        "8-K", count=1
+    )
+
+    assert len(doc.raw_text) > len(summary) * 5
+    assert body_only_phrase in doc.raw_text
+
+
+def test_edgar_entry_with_empty_or_unusable_filing_body_is_skipped() -> None:
+    empty_href = "https://www.sec.gov/Archives/edgar/data/1045810/empty.htm"
+    valid_href = "https://www.sec.gov/Archives/edgar/data/1045810/valid-after-empty.htm"
+    feed = _edgar_feed(
+        _entry(
+            title="8-K - empty",
+            href=empty_href,
+            filing_type="8-K",
+        )
+        + _entry(
+            title="8-K - valid",
+            href=valid_href,
+            filing_type="8-K",
+        )
+    )
+
+    docs = EdgarRssFetcher(
+        reader=_reader(
+            feed,
+            {
+                empty_href: "<html><script>discard()</script><style>discard</style></html>",
+                valid_href: _filing_html("Valid filing body after unusable filing."),
+            },
+        )
+    ).fetch_recent("8-K", count=10)
+
+    assert [doc.url for doc in docs] == [valid_href]
+    assert docs[0].raw_text == "Filing document Valid filing body after unusable filing."
 
 
 def test_reuters_rss_returns_only_nvda_relevant_source_documents() -> None:
