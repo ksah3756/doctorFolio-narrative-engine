@@ -13,6 +13,7 @@ from dcf_engine.narrative_axes import (
     PullSignature,
     _axis_stability_score,
     _centered_claim_assumption_matrix,
+    _weighted_claim_assumption_pull,
     build_pull_signature,
     evaluate_type1_assumption_mass_gates,
     generate_narrative_axes,
@@ -142,6 +143,15 @@ def test_unconditional_pull_enters_matrix_at_face_value() -> None:
     assert assumption_ids == ("margin",)
     assert matrix[1, 0] == pytest.approx(1.0)
     assert matrix[0, 0] == pytest.approx(-1.0)
+
+
+def test_positional_claim_assumption_pull_preserves_lifecycle_and_is_unconditional() -> None:
+    pull = ClaimAssumptionPull("c", "a", 1.0, 1.0, "mature", {"x": 1})
+
+    assert pull.is_conditional is False
+    assert pull.lifecycle_stage == "mature"
+    assert pull.tam_structure == {"x": 1}
+    assert _weighted_claim_assumption_pull(pull) == pytest.approx(1.0)
 
 
 def test_mixed_conditional_set_produces_correctly_discounted_matrix() -> None:
