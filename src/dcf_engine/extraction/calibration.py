@@ -52,13 +52,28 @@ def calibrate_extraction_replay(
     if len(valid_responses) < 2:
         raise ValueError("calibration requires at least two schema-valid replay responses")
 
-    grouped_labels: dict[tuple[str, str], Counter[ClaimLabel]] = {}
     valid_counts_by_chunk = Counter(response.chunk_id for response in valid_responses)
+    under_repeated_chunks = sorted(
+        chunk_id
+        for chunk_id in {response.chunk_id for response in responses}
+        if valid_counts_by_chunk[chunk_id] < 2
+    )
+    if under_repeated_chunks:
+        raise ValueError("calibration requires at least two schema-valid repeats per chunk")
+
+    grouped_labels: dict[tuple[str, str], Counter[ClaimLabel]] = {}
     for response in valid_responses:
+        response_labels: dict[tuple[str, str], ClaimLabel] = {}
         for claim in response.claims:
             claim_group = _claim_group_key(claim.claim_text)
             label: ClaimLabel = (claim.claim_subject, claim.direction)
-            grouped_labels.setdefault((response.chunk_id, claim_group), Counter())[label] += 1
+            group_key = (response.chunk_id, claim_group)
+            existing_label = response_labels.get(group_key)
+            if existing_label is not None and existing_label != label:
+                raise ValueError("calibration requires one label per claim group per response")
+            response_labels[group_key] = label
+        for group_key, label in response_labels.items():
+            grouped_labels.setdefault(group_key, Counter())[label] += 1
 
     if not grouped_labels:
         raise ValueError("calibration requires at least one claim in schema-valid replay responses")
