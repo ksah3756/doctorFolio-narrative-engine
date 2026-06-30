@@ -8,12 +8,13 @@ import re
 import urllib.request
 import xml.etree.ElementTree as ET
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import date, datetime
 from email.utils import parsedate_to_datetime
 from html.parser import HTMLParser
 from pathlib import Path
 from typing import Final, Literal
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urljoin
 
 from pydantic import BaseModel, ConfigDict
 
@@ -29,6 +30,12 @@ _SEC_USER_AGENT: Final[str] = "dcf-narrative-engine/0.1 contact=research@example
 _REUTERS_RSS_URL: Final[str] = "https://www.reuters.com/technology/rss"
 _IGNORED_HTML_ELEMENTS: Final[frozenset[str]] = frozenset({"script", "style"})
 _NVDA_RE: Final[re.Pattern[str]] = re.compile(r"\b(?:NVDA|NVIDIA)\b", re.IGNORECASE)
+
+
+@dataclass(frozen=True)
+class _FilingDocumentRow:
+    href: str
+    cells: tuple[str, ...]
 
 
 class SourceDocument(BaseModel):
@@ -198,7 +205,8 @@ def _document_from_entry(
     ):
         return None
 
-    raw_text = _filing_body_text(reader(url))
+    document_url, document_text = _resolve_filing_document(url, filing_type, reader)
+    raw_text = _filing_body_text(document_text)
     if raw_text is None:
         return None
 
@@ -208,8 +216,8 @@ def _document_from_entry(
         source_reliability=SOURCE_RELIABILITY[filing_type],
     )
     return SourceDocument(
-        doc_id=_doc_id(url),
-        url=url,
+        doc_id=_doc_id(document_url),
+        url=document_url,
         title=title,
         published_date=published_date,
         source_ref=source_ref,
@@ -313,6 +321,61 @@ def _is_nvda_relevant(title: str, raw_text: str) -> bool:
     return _NVDA_RE.search(f"{title} {raw_text}") is not None
 
 
+class _SecFilingIndexParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.rows: list[_FilingDocumentRow] = []
+        self._inside_row = False
+        self._inside_cell = False
+        self._row_href: str | None = None
+        self._current_cells: list[str] = []
+        self._current_cell_chunks: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        normalized_tag = tag.lower()
+        if normalized_tag == "tr":
+            self._inside_row = True
+            self._inside_cell = False
+            self._row_href = None
+            self._current_cells = []
+            self._current_cell_chunks = []
+            return
+        if not self._inside_row:
+            return
+        if normalized_tag in {"td", "th"}:
+            self._inside_cell = True
+            self._current_cell_chunks = []
+            return
+        if normalized_tag == "a" and self._inside_cell and self._row_href is None:
+            self._row_href = _attribute_value(attrs, "href")
+
+    def handle_endtag(self, tag: str) -> None:
+        normalized_tag = tag.lower()
+        if normalized_tag in {"td", "th"} and self._inside_cell:
+            cell = _normalize_text(" ".join(self._current_cell_chunks))
+            self._current_cells.append(cell)
+            self._inside_cell = False
+            self._current_cell_chunks = []
+            return
+        if normalized_tag == "tr" and self._inside_row:
+            if self._row_href is not None and self._current_cells:
+                self.rows.append(
+                    _FilingDocumentRow(
+                        href=self._row_href,
+                        cells=tuple(self._current_cells),
+                    )
+                )
+            self._inside_row = False
+            self._inside_cell = False
+            self._row_href = None
+            self._current_cells = []
+            self._current_cell_chunks = []
+
+    def handle_data(self, data: str) -> None:
+        if self._inside_cell:
+            self._current_cell_chunks.append(data)
+
+
 class _HtmlTextExtractor(HTMLParser):
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
@@ -339,6 +402,52 @@ class _HtmlTextExtractor(HTMLParser):
 def _filing_body_text(value: str) -> str | None:
     normalized = _normalize_html_text(value)
     return normalized or None
+
+
+def _resolve_filing_document(
+    url: str,
+    filing_type: str,
+    reader: FeedReader,
+) -> tuple[str, str]:
+    document_text = reader(url)
+    if not _is_sec_filing_index_url(url):
+        return url, document_text
+
+    document_url = _primary_filing_document_url(document_text, url, filing_type)
+    if document_url is None:
+        return url, ""
+    return document_url, reader(document_url)
+
+
+def _primary_filing_document_url(
+    index_html: str,
+    index_url: str,
+    filing_type: str,
+) -> str | None:
+    parser = _SecFilingIndexParser()
+    parser.feed(index_html)
+    parser.close()
+
+    for row in parser.rows:
+        if _row_matches_filing_type(row.cells, filing_type):
+            return urljoin(index_url, row.href)
+    return None
+
+
+def _row_matches_filing_type(cells: tuple[str, ...], filing_type: str) -> bool:
+    return any(cell.upper() == filing_type for cell in cells)
+
+
+def _is_sec_filing_index_url(url: str) -> bool:
+    path = url.split("?", maxsplit=1)[0].lower()
+    return path.endswith(("-index.htm", "-index.html"))
+
+
+def _attribute_value(attrs: list[tuple[str, str | None]], name: str) -> str | None:
+    for attr_name, attr_value in attrs:
+        if attr_name.lower() == name and attr_value:
+            return attr_value
+    return None
 
 
 def _normalize_html_text(value: str) -> str:
