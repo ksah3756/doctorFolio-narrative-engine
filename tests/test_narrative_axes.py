@@ -11,6 +11,9 @@ from dcf_engine.narrative_axes import (
     EvidencePull,
     NarrativeAxis,
     PullSignature,
+    _axis_stability_score,
+    _centered_claim_assumption_matrix,
+    _weighted_claim_assumption_pull,
     build_pull_signature,
     evaluate_type1_assumption_mass_gates,
     generate_narrative_axes,
@@ -107,6 +110,169 @@ def test_stage_c_rejects_axis_when_one_score_side_lacks_weighted_claim_mass() ->
     axes = generate_type1_tension_axes(pulls, contested_mass_threshold=0.50)
 
     assert axes == ()
+
+
+def test_conditional_pull_enters_matrix_at_discounted_value() -> None:
+    pulls = (
+        ClaimAssumptionPull(
+            claim_id="conditional-up",
+            assumption_id="margin",
+            pull=1.0,
+            is_conditional=True,
+        ),
+        ClaimAssumptionPull(claim_id="realized-down", assumption_id="margin", pull=-0.5),
+    )
+
+    matrix, claim_ids, assumption_ids = _centered_claim_assumption_matrix(pulls, ("margin",))
+
+    assert claim_ids == ("conditional-up", "realized-down")
+    assert assumption_ids == ("margin",)
+    assert matrix[0, 0] == pytest.approx(0.5)
+    assert matrix[1, 0] == pytest.approx(-0.5)
+
+
+def test_unconditional_pull_enters_matrix_at_face_value() -> None:
+    pulls = (
+        ClaimAssumptionPull(claim_id="realized-up", assumption_id="margin", pull=1.0),
+        ClaimAssumptionPull(claim_id="realized-down", assumption_id="margin", pull=-1.0),
+    )
+
+    matrix, claim_ids, assumption_ids = _centered_claim_assumption_matrix(pulls, ("margin",))
+
+    assert claim_ids == ("realized-down", "realized-up")
+    assert assumption_ids == ("margin",)
+    assert matrix[1, 0] == pytest.approx(1.0)
+    assert matrix[0, 0] == pytest.approx(-1.0)
+
+
+def test_positional_claim_assumption_pull_preserves_lifecycle_and_is_unconditional() -> None:
+    pull = ClaimAssumptionPull("c", "a", 1.0, 1.0, "mature", {"x": 1})
+
+    assert pull.is_conditional is False
+    assert pull.lifecycle_stage == "mature"
+    assert pull.tam_structure == {"x": 1}
+    assert _weighted_claim_assumption_pull(pull) == pytest.approx(1.0)
+
+
+def test_mixed_conditional_set_produces_correctly_discounted_matrix() -> None:
+    pulls = (
+        ClaimAssumptionPull(
+            claim_id="conditional",
+            assumption_id="margin",
+            pull=1.0,
+            is_conditional=True,
+        ),
+        ClaimAssumptionPull(claim_id="realized", assumption_id="margin", pull=1.0),
+    )
+
+    matrix, claim_ids, assumption_ids = _centered_claim_assumption_matrix(pulls, ("margin",))
+
+    assert claim_ids == ("conditional", "realized")
+    assert assumption_ids == ("margin",)
+    assert matrix[0, 0] == pytest.approx(-0.25)
+    assert matrix[1, 0] == pytest.approx(0.25)
+
+
+def test_stable_axis_passes_leave_one_out_gate() -> None:
+    pulls = (
+        ClaimAssumptionPull(claim_id="positive-1", assumption_id="margin", pull=1.0),
+        ClaimAssumptionPull(claim_id="positive-2", assumption_id="margin", pull=1.0),
+        ClaimAssumptionPull(claim_id="positive-3", assumption_id="margin", pull=1.0),
+        ClaimAssumptionPull(claim_id="negative-1", assumption_id="margin", pull=-1.0),
+        ClaimAssumptionPull(claim_id="negative-2", assumption_id="margin", pull=-1.0),
+    )
+
+    axes = generate_type1_tension_axes(pulls, contested_mass_threshold=1.0)
+
+    assert len(axes) == 1
+    assert axes[0].loadings == pytest.approx({"margin": 1.0})
+
+
+def test_stability_gate_preserves_secondary_orthogonal_type1_axis() -> None:
+    pulls = (
+        ClaimAssumptionPull(claim_id="axis-1-positive", assumption_id="growth", pull=3.0),
+        ClaimAssumptionPull(claim_id="axis-1-negative", assumption_id="growth", pull=-3.0),
+        ClaimAssumptionPull(claim_id="axis-2-positive", assumption_id="margin", pull=1.0),
+        ClaimAssumptionPull(claim_id="axis-2-negative", assumption_id="margin", pull=-1.0),
+    )
+
+    axes = generate_type1_tension_axes(
+        pulls,
+        contested_mass_threshold=1.0,
+        explained_variance_threshold=1.0,
+    )
+
+    assert len(axes) == 2
+
+
+def test_unstable_axis_is_rejected_by_stability_gate() -> None:
+    pulls = (
+        ClaimAssumptionPull(claim_id="positive", assumption_id="margin", pull=1.0),
+        ClaimAssumptionPull(claim_id="negative", assumption_id="margin", pull=-1.0),
+    )
+
+    axes = generate_type1_tension_axes(pulls, contested_mass_threshold=1.0)
+
+    assert axes == ()
+
+
+def test_outlier_supported_axis_fails_stability_when_outlier_removed() -> None:
+    # The growth axis exists only because of the single "growth-outlier" claim
+    # (growth pull 2.0). Removing that claim collapses the growth column variance
+    # to zero, so the growth axis disappears in that leave-one-out fold while the
+    # orthogonal margin axis keeps varying. The outlier-driven axis must be rejected
+    # by the stability gate; only the genuinely stable margin axis may survive.
+    # (Regression for the cycle-3 P1: the LOO null-space direction still has a
+    # unit-norm right singular vector, so filtering folds by vector norm — instead
+    # of by singular value — would let the collapsed axis match the null space and
+    # be promoted.)
+    pulls = (
+        ClaimAssumptionPull(claim_id="growth-outlier", assumption_id="growth", pull=2.0),
+        ClaimAssumptionPull(claim_id="claim-b", assumption_id="growth", pull=-1.0),
+        ClaimAssumptionPull(claim_id="claim-c", assumption_id="growth", pull=-1.0),
+        ClaimAssumptionPull(claim_id="claim-b", assumption_id="margin", pull=1.0),
+        ClaimAssumptionPull(claim_id="claim-c", assumption_id="margin", pull=-1.0),
+    )
+
+    axes = generate_type1_tension_axes(
+        pulls,
+        contested_mass_threshold=1.0,
+        explained_variance_threshold=1.0,
+    )
+
+    # The outlier-driven growth axis must not be promoted: once "growth-outlier" is
+    # removed the two remaining growth pulls are equal, so the growth direction has
+    # zero variance in that fold and matches only the LOO null space. No returned
+    # axis may be growth-dominated. (The buggy vector-norm filter returned a
+    # growth axis with loadings {"growth": 1.0}.) Survival of genuinely stable axes
+    # is covered by test_stable_axis_passes_leave_one_out_gate and
+    # test_stability_gate_preserves_secondary_orthogonal_type1_axis.
+    assert all(
+        abs(axis.loadings["growth"]) < abs(axis.loadings["margin"]) for axis in axes
+    )
+
+
+@pytest.mark.parametrize(
+    ("matrix", "axis_loadings"),
+    [
+        (np.array([[1.0], [-1.0]], dtype=np.float64), np.array([1.0], dtype=np.float64)),
+        (
+            np.array([[1.0], [1.0], [-1.0]], dtype=np.float64),
+            np.array([1.0], dtype=np.float64),
+        ),
+        (
+            np.array([[1.0, 0.0], [0.0, 1.0], [-1.0, -1.0]], dtype=np.float64),
+            np.array([1.0, 0.0], dtype=np.float64),
+        ),
+    ],
+)
+def test_stability_score_is_bounded_zero_to_one(
+    matrix: np.ndarray[tuple[int, int], np.dtype[np.float64]],
+    axis_loadings: np.ndarray[tuple[int], np.dtype[np.float64]],
+) -> None:
+    score = _axis_stability_score(matrix, axis_loadings)
+
+    assert 0.0 <= score <= 1.0
 
 
 def test_builds_signed_pull_signature_from_contested_evidence() -> None:

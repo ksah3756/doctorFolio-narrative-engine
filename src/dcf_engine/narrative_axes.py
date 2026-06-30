@@ -17,6 +17,8 @@ DEFAULT_EXPLAINED_VARIANCE_THRESHOLD: Final = 0.80
 DEFAULT_MAX_AXES: Final = 3
 DEFAULT_TYPE1_SHIFT_STRENGTH: Final = 1.0
 DEFAULT_CONTESTED_MASS_THRESHOLD: Final = 1.0
+DEFAULT_AXIS_STABILITY_THRESHOLD: Final = 0.70
+CONDITIONAL_PULL_DISCOUNT: Final = 0.5
 ZERO_VARIANCE_TOLERANCE: Final = 1e-12
 
 type PullVector = Sequence[float] | NDArray[np.float64]
@@ -45,6 +47,7 @@ class ClaimAssumptionPull:
     weight: float = 1.0
     lifecycle_stage: LifecycleStage = "growth"
     tam_structure: TamStructure = field(default_factory=dict)
+    is_conditional: bool = False
 
 
 @dataclass(frozen=True)
@@ -174,6 +177,7 @@ def generate_type1_tension_axes(
     *,
     contested_mass_threshold: float = DEFAULT_CONTESTED_MASS_THRESHOLD,
     explained_variance_threshold: float = DEFAULT_EXPLAINED_VARIANCE_THRESHOLD,
+    stability_threshold: float = DEFAULT_AXIS_STABILITY_THRESHOLD,
     max_axes: int = DEFAULT_MAX_AXES,
 ) -> tuple[NarrativeAxis, ...]:
     """Generate v6.1 Type-1 axes from gated, centered claim-by-assumption pulls."""
@@ -183,6 +187,7 @@ def generate_type1_tension_axes(
         max_axes=max_axes,
     )
     _validate_contested_mass_threshold(contested_mass_threshold)
+    _validate_stability_threshold(stability_threshold)
     ordered_pulls = _ordered_claim_assumption_pulls(pulls)
     gate_results = evaluate_type1_assumption_mass_gates(
         ordered_pulls,
@@ -230,6 +235,8 @@ def generate_type1_tension_axes(
             [loadings[assumption_id] for assumption_id in assumption_ids],
             dtype=np.float64,
         )
+        if _axis_stability_score(matrix, loading_vector) < stability_threshold:
+            continue
         scores = matrix @ loading_vector
         if not _passes_axis_bipolar_mass_gate(
             claim_ids=claim_ids,
@@ -314,6 +321,11 @@ def _validate_axis_controls(
 def _validate_contested_mass_threshold(contested_mass_threshold: float) -> None:
     if not np.isfinite(contested_mass_threshold) or contested_mass_threshold <= 0.0:
         raise ValueError("contested_mass_threshold must be finite and positive")
+
+
+def _validate_stability_threshold(stability_threshold: float) -> None:
+    if not np.isfinite(stability_threshold) or not (0.0 <= stability_threshold <= 1.0):
+        raise ValueError("stability_threshold must be finite and in [0, 1]")
 
 
 def _signed_evidence_items(
@@ -445,10 +457,58 @@ def _centered_claim_assumption_matrix(
 
 
 def _weighted_claim_assumption_pull(pull: ClaimAssumptionPull) -> float:
-    weighted_pull = pull.pull * pull.weight
+    discount = CONDITIONAL_PULL_DISCOUNT if pull.is_conditional else 1.0
+    weighted_pull = pull.pull * pull.weight * discount
     if not np.isfinite(weighted_pull):
         raise ValueError("weighted claim-assumption pull values must be finite")
     return float(weighted_pull)
+
+
+def _axis_stability_score(
+    matrix: NDArray[np.float64],
+    axis_loadings: NDArray[np.float64],
+    min_rows_for_stability: int = 2,
+) -> float:
+    """Return the conservative leave-one-out cosine for one candidate axis."""
+
+    n_rows = matrix.shape[0]
+    if n_rows < min_rows_for_stability + 1:
+        return 0.0
+
+    axis_norm = float(np.linalg.norm(axis_loadings))
+    if axis_norm <= ZERO_VARIANCE_TOLERANCE:
+        return 0.0
+
+    min_cosine = 1.0
+    for row_index in range(n_rows):
+        loo_matrix = np.delete(matrix, row_index, axis=0)
+        centered = loo_matrix - np.mean(loo_matrix, axis=0, keepdims=True)
+        if centered.shape[0] < min_rows_for_stability or np.allclose(
+            centered,
+            0.0,
+            atol=ZERO_VARIANCE_TOLERANCE,
+        ):
+            return 0.0
+
+        _, loo_singular_values, loo_right_singular_vectors = np.linalg.svd(
+            centered,
+            full_matrices=False,
+        )
+        # Right singular vectors are always unit-norm, so a vector-norm filter is a
+        # no-op that keeps null-space directions (singular value 0, zero variance).
+        # Filter on the singular values instead: only variance-bearing components are
+        # valid matches. Otherwise an axis that collapses in this fold matches the LOO
+        # null space and is spuriously promoted as stable.
+        valid_components = loo_singular_values**2 > ZERO_VARIANCE_TOLERANCE
+        if not np.any(valid_components):
+            return 0.0
+
+        valid_vectors = loo_right_singular_vectors[valid_components]
+        cosines = np.abs(valid_vectors @ axis_loadings) / axis_norm
+        best_cosine = float(np.max(cosines))
+        min_cosine = min(min_cosine, best_cosine)
+
+    return float(np.clip(min_cosine, 0.0, 1.0))
 
 
 def _claim_weights_by_id(
