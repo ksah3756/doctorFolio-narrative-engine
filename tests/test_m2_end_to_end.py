@@ -369,7 +369,7 @@ def _transcript_specs() -> list[_ClaimSpec]:
         ),
         _ClaimSpec(
             "sg-and-a",
-            "Sales, general and administrative investment increased with enterprise demand coverage.",
+            "SG&A investment increased with enterprise demand coverage.",
             "COST_SIGNAL",
             "GUIDANCE",
             "INCREASE",
@@ -532,7 +532,8 @@ def _response(
 
 
 def _source_ref(
-    discovery_channel: Literal["direct", "edgar_api"], content_source: Literal["8-K", "earnings_call"]
+    discovery_channel: Literal["direct", "edgar_api"],
+    content_source: Literal["8-K", "earnings_call"],
 ) -> SourceRef:
     return SourceRef(
         discovery_channel=discovery_channel,

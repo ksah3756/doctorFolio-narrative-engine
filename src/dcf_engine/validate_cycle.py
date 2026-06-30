@@ -18,6 +18,7 @@ from dcf_engine.routing import route_claims_to_factors
 DEFAULT_VALIDATION_SEED: Final[int] = 20260629
 DEFAULT_VALIDATION_ITERATIONS: Final[int] = 1_000
 VALIDATION_REGIME: Final[Regime] = "normal"
+NVDA_DAMODARAN_REF_USD: Final[float] = 3_600_000_000_000.0
 P10_PERCENTILE: Final[float] = 10.0
 P90_PERCENTILE: Final[float] = 90.0
 MIN_ITERATIONS: Final[int] = 1
