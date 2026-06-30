@@ -188,6 +188,23 @@ def test_stable_axis_passes_leave_one_out_gate() -> None:
     assert axes[0].loadings == pytest.approx({"margin": 1.0})
 
 
+def test_stability_gate_preserves_secondary_orthogonal_type1_axis() -> None:
+    pulls = (
+        ClaimAssumptionPull(claim_id="axis-1-positive", assumption_id="growth", pull=3.0),
+        ClaimAssumptionPull(claim_id="axis-1-negative", assumption_id="growth", pull=-3.0),
+        ClaimAssumptionPull(claim_id="axis-2-positive", assumption_id="margin", pull=1.0),
+        ClaimAssumptionPull(claim_id="axis-2-negative", assumption_id="margin", pull=-1.0),
+    )
+
+    axes = generate_type1_tension_axes(
+        pulls,
+        contested_mass_threshold=1.0,
+        explained_variance_threshold=1.0,
+    )
+
+    assert len(axes) == 2
+
+
 def test_unstable_axis_is_rejected_by_stability_gate() -> None:
     pulls = (
         ClaimAssumptionPull(claim_id="positive", assumption_id="margin", pull=1.0),
