@@ -490,15 +490,21 @@ def _axis_stability_score(
         ):
             return 0.0
 
-        _, _, loo_right_singular_vectors = np.linalg.svd(centered, full_matrices=False)
-        loo_norms = np.linalg.norm(loo_right_singular_vectors, axis=1)
-        valid_components = loo_norms > ZERO_VARIANCE_TOLERANCE
+        _, loo_singular_values, loo_right_singular_vectors = np.linalg.svd(
+            centered,
+            full_matrices=False,
+        )
+        # Right singular vectors are always unit-norm, so a vector-norm filter is a
+        # no-op that keeps null-space directions (singular value 0, zero variance).
+        # Filter on the singular values instead: only variance-bearing components are
+        # valid matches. Otherwise an axis that collapses in this fold matches the LOO
+        # null space and is spuriously promoted as stable.
+        valid_components = loo_singular_values**2 > ZERO_VARIANCE_TOLERANCE
         if not np.any(valid_components):
             return 0.0
 
-        cosines = np.abs(loo_right_singular_vectors[valid_components] @ axis_loadings) / (
-            loo_norms[valid_components] * axis_norm
-        )
+        valid_vectors = loo_right_singular_vectors[valid_components]
+        cosines = np.abs(valid_vectors @ axis_loadings) / axis_norm
         best_cosine = float(np.max(cosines))
         min_cosine = min(min_cosine, best_cosine)
 
