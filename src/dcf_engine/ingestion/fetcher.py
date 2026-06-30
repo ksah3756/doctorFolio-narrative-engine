@@ -10,6 +10,7 @@ import xml.etree.ElementTree as ET
 from collections.abc import Callable
 from datetime import date, datetime
 from email.utils import parsedate_to_datetime
+from html.parser import HTMLParser
 from pathlib import Path
 from typing import Final, Literal
 from urllib.parse import urlencode
@@ -26,7 +27,7 @@ _SUPPORTED_FILINGS: Final[frozenset[str]] = frozenset({"8-K", "10-Q", "10-K"})
 _SEC_BROWSE_URL: Final[str] = "https://www.sec.gov/cgi-bin/browse-edgar"
 _SEC_USER_AGENT: Final[str] = "dcf-narrative-engine/0.1 contact=research@example.com"
 _REUTERS_RSS_URL: Final[str] = "https://www.reuters.com/technology/rss"
-_TAG_RE: Final[re.Pattern[str]] = re.compile(r"<[^>]+>")
+_IGNORED_HTML_ELEMENTS: Final[frozenset[str]] = frozenset({"script", "style"})
 _NVDA_RE: Final[re.Pattern[str]] = re.compile(r"\b(?:NVDA|NVIDIA)\b", re.IGNORECASE)
 
 
@@ -71,7 +72,7 @@ class EdgarRssFetcher:
         feed_text = self._reader(_edgar_feed_url(self._ticker, filing_type, count))
         documents: list[SourceDocument] = []
         for entry in _feed_entries(feed_text):
-            document = _document_from_entry(entry, filing_type)
+            document = _document_from_entry(entry, filing_type, self._reader)
             if document is not None:
                 documents.append(document)
             if len(documents) == count:
@@ -178,12 +179,15 @@ def _rss_items(feed_text: str) -> list[ET.Element]:
     return root.findall("./channel/item")
 
 
-def _document_from_entry(entry: ET.Element, requested_filing_type: str) -> SourceDocument | None:
+def _document_from_entry(
+    entry: ET.Element,
+    requested_filing_type: str,
+    reader: FeedReader,
+) -> SourceDocument | None:
     title = _required_text(entry, "atom:title")
     url = _entry_href(entry)
     published_date = _entry_date(entry)
     filing_type = _entry_filing_type(entry)
-    raw_text = _entry_summary(entry)
 
     if (
         title is None
@@ -191,8 +195,11 @@ def _document_from_entry(entry: ET.Element, requested_filing_type: str) -> Sourc
         or published_date is None
         or filing_type != requested_filing_type
         or filing_type not in _SUPPORTED_FILINGS
-        or raw_text is None
     ):
+        return None
+
+    raw_text = _filing_body_text(reader(url))
+    if raw_text is None:
         return None
 
     source_ref = SourceRef(
@@ -247,13 +254,6 @@ def _entry_filing_type(entry: ET.Element) -> str | None:
         return None
     prefix = title.split(" - ", maxsplit=1)[0]
     return prefix if prefix in _SUPPORTED_FILINGS else None
-
-
-def _entry_summary(entry: ET.Element) -> str | None:
-    summary = _required_text(entry, "atom:summary")
-    if summary is None:
-        return None
-    return _normalize_html_text(summary) or None
 
 
 def _reuters_document_from_item(item: ET.Element) -> SourceDocument | None:
@@ -313,9 +313,39 @@ def _is_nvda_relevant(title: str, raw_text: str) -> bool:
     return _NVDA_RE.search(f"{title} {raw_text}") is not None
 
 
+class _HtmlTextExtractor(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self._chunks: list[str] = []
+        self._ignored_depth = 0
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        del attrs
+        if tag.lower() in _IGNORED_HTML_ELEMENTS:
+            self._ignored_depth += 1
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag.lower() in _IGNORED_HTML_ELEMENTS and self._ignored_depth > 0:
+            self._ignored_depth -= 1
+
+    def handle_data(self, data: str) -> None:
+        if self._ignored_depth == 0:
+            self._chunks.append(data)
+
+    def text(self) -> str:
+        return _normalize_text(" ".join(self._chunks))
+
+
+def _filing_body_text(value: str) -> str | None:
+    normalized = _normalize_html_text(value)
+    return normalized or None
+
+
 def _normalize_html_text(value: str) -> str:
-    unescaped = html.unescape(value)
-    return _normalize_text(_TAG_RE.sub(" ", unescaped))
+    parser = _HtmlTextExtractor()
+    parser.feed(html.unescape(value))
+    parser.close()
+    return parser.text()
 
 
 def _normalize_text(value: str) -> str:
