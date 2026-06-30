@@ -45,9 +45,9 @@ class ClaimAssumptionPull:
     assumption_id: str
     pull: float
     weight: float = 1.0
-    is_conditional: bool = False
     lifecycle_stage: LifecycleStage = "growth"
     tam_structure: TamStructure = field(default_factory=dict)
+    is_conditional: bool = False
 
 
 @dataclass(frozen=True)
