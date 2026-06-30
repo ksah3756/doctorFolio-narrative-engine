@@ -1,6 +1,7 @@
 import numpy as np
 import pytest
 
+import dcf_engine.narrative_axes as narrative_axes_module
 from dcf_engine.assumption import AssumptionState, ScaleSpec
 from dcf_engine.distributions import DistributionFamily
 from dcf_engine.loading import resolved_mu
@@ -160,6 +161,57 @@ def test_mixed_conditional_set_produces_correctly_discounted_matrix() -> None:
     assert assumption_ids == ("margin",)
     assert matrix[0, 0] == pytest.approx(-0.25)
     assert matrix[1, 0] == pytest.approx(0.25)
+
+
+def test_stable_axis_passes_leave_one_out_gate() -> None:
+    pulls = (
+        ClaimAssumptionPull(claim_id="positive-1", assumption_id="margin", pull=1.0),
+        ClaimAssumptionPull(claim_id="positive-2", assumption_id="margin", pull=1.0),
+        ClaimAssumptionPull(claim_id="positive-3", assumption_id="margin", pull=1.0),
+        ClaimAssumptionPull(claim_id="negative-1", assumption_id="margin", pull=-1.0),
+        ClaimAssumptionPull(claim_id="negative-2", assumption_id="margin", pull=-1.0),
+    )
+
+    axes = generate_type1_tension_axes(pulls, contested_mass_threshold=1.0)
+
+    assert len(axes) == 1
+    assert axes[0].loadings == pytest.approx({"margin": 1.0})
+
+
+def test_unstable_axis_is_rejected_by_stability_gate() -> None:
+    pulls = (
+        ClaimAssumptionPull(claim_id="positive", assumption_id="margin", pull=1.0),
+        ClaimAssumptionPull(claim_id="negative", assumption_id="margin", pull=-1.0),
+    )
+
+    axes = generate_type1_tension_axes(pulls, contested_mass_threshold=1.0)
+
+    assert axes == ()
+
+
+@pytest.mark.parametrize(
+    ("matrix", "axis_loadings"),
+    [
+        (np.array([[1.0], [-1.0]], dtype=np.float64), np.array([1.0], dtype=np.float64)),
+        (
+            np.array([[1.0], [1.0], [-1.0]], dtype=np.float64),
+            np.array([1.0], dtype=np.float64),
+        ),
+        (
+            np.array([[1.0, 0.0], [0.0, 1.0], [-1.0, -1.0]], dtype=np.float64),
+            np.array([1.0, 0.0], dtype=np.float64),
+        ),
+    ],
+)
+def test_stability_score_is_bounded_zero_to_one(
+    matrix: np.ndarray[tuple[int, int], np.dtype[np.float64]],
+    axis_loadings: np.ndarray[tuple[int], np.dtype[np.float64]],
+) -> None:
+    stability_score = getattr(narrative_axes_module, "_axis_stability_score")
+
+    score = stability_score(matrix, axis_loadings)
+
+    assert 0.0 <= score <= 1.0
 
 
 def test_builds_signed_pull_signature_from_contested_evidence() -> None:
