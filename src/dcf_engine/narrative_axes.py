@@ -469,7 +469,7 @@ def _axis_stability_score(
     axis_loadings: NDArray[np.float64],
     min_rows_for_stability: int = 2,
 ) -> float:
-    """Return the conservative leave-one-out cosine for one dominant axis."""
+    """Return the conservative leave-one-out cosine for one candidate axis."""
 
     n_rows = matrix.shape[0]
     if n_rows < min_rows_for_stability + 1:
@@ -490,14 +490,17 @@ def _axis_stability_score(
         ):
             return 0.0
 
-        _, _, right_singular_vectors = np.linalg.svd(centered, full_matrices=False)
-        loo_loadings = right_singular_vectors[0, :]
-        loo_norm = float(np.linalg.norm(loo_loadings))
-        if loo_norm <= ZERO_VARIANCE_TOLERANCE:
+        _, _, loo_right_singular_vectors = np.linalg.svd(centered, full_matrices=False)
+        loo_norms = np.linalg.norm(loo_right_singular_vectors, axis=1)
+        valid_components = loo_norms > ZERO_VARIANCE_TOLERANCE
+        if not np.any(valid_components):
             return 0.0
 
-        cosine = abs(float(np.dot(axis_loadings, loo_loadings) / (axis_norm * loo_norm)))
-        min_cosine = min(min_cosine, cosine)
+        cosines = np.abs(loo_right_singular_vectors[valid_components] @ axis_loadings) / (
+            loo_norms[valid_components] * axis_norm
+        )
+        best_cosine = float(np.max(cosines))
+        min_cosine = min(min_cosine, best_cosine)
 
     return float(np.clip(min_cosine, 0.0, 1.0))
 
