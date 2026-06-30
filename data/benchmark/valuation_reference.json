@@ -1,0 +1,6 @@
+{
+  "as_of_date": "2026-06-29",
+  "note": "Static independent benchmark used by Issue #88 M2 real-data DoD; tests compare the validation median to this value within +/-30% without live provider calls.",
+  "source": "Aswath Damodaran NVDA valuation benchmark, curated offline for Issue #88 review",
+  "value_usd": 3600000000000.0
+}
