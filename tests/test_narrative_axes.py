@@ -216,6 +216,42 @@ def test_unstable_axis_is_rejected_by_stability_gate() -> None:
     assert axes == ()
 
 
+def test_outlier_supported_axis_fails_stability_when_outlier_removed() -> None:
+    # The growth axis exists only because of the single "growth-outlier" claim
+    # (growth pull 2.0). Removing that claim collapses the growth column variance
+    # to zero, so the growth axis disappears in that leave-one-out fold while the
+    # orthogonal margin axis keeps varying. The outlier-driven axis must be rejected
+    # by the stability gate; only the genuinely stable margin axis may survive.
+    # (Regression for the cycle-3 P1: the LOO null-space direction still has a
+    # unit-norm right singular vector, so filtering folds by vector norm — instead
+    # of by singular value — would let the collapsed axis match the null space and
+    # be promoted.)
+    pulls = (
+        ClaimAssumptionPull(claim_id="growth-outlier", assumption_id="growth", pull=2.0),
+        ClaimAssumptionPull(claim_id="claim-b", assumption_id="growth", pull=-1.0),
+        ClaimAssumptionPull(claim_id="claim-c", assumption_id="growth", pull=-1.0),
+        ClaimAssumptionPull(claim_id="claim-b", assumption_id="margin", pull=1.0),
+        ClaimAssumptionPull(claim_id="claim-c", assumption_id="margin", pull=-1.0),
+    )
+
+    axes = generate_type1_tension_axes(
+        pulls,
+        contested_mass_threshold=1.0,
+        explained_variance_threshold=1.0,
+    )
+
+    # The outlier-driven growth axis must not be promoted: once "growth-outlier" is
+    # removed the two remaining growth pulls are equal, so the growth direction has
+    # zero variance in that fold and matches only the LOO null space. No returned
+    # axis may be growth-dominated. (The buggy vector-norm filter returned a
+    # growth axis with loadings {"growth": 1.0}.) Survival of genuinely stable axes
+    # is covered by test_stable_axis_passes_leave_one_out_gate and
+    # test_stability_gate_preserves_secondary_orthogonal_type1_axis.
+    assert all(
+        abs(axis.loadings["growth"]) < abs(axis.loadings["margin"]) for axis in axes
+    )
+
+
 @pytest.mark.parametrize(
     ("matrix", "axis_loadings"),
     [
