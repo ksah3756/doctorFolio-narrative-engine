@@ -1,7 +1,6 @@
 import numpy as np
 import pytest
 
-import dcf_engine.narrative_axes as narrative_axes_module
 from dcf_engine.assumption import AssumptionState, ScaleSpec
 from dcf_engine.distributions import DistributionFamily
 from dcf_engine.loading import resolved_mu
@@ -12,12 +11,13 @@ from dcf_engine.narrative_axes import (
     EvidencePull,
     NarrativeAxis,
     PullSignature,
+    _axis_stability_score,
+    _centered_claim_assumption_matrix,
     build_pull_signature,
     evaluate_type1_assumption_mass_gates,
     generate_narrative_axes,
     generate_type1_narrative_candidates,
     generate_type1_tension_axes,
-    _centered_claim_assumption_matrix,
 )
 
 
@@ -207,9 +207,7 @@ def test_stability_score_is_bounded_zero_to_one(
     matrix: np.ndarray[tuple[int, int], np.dtype[np.float64]],
     axis_loadings: np.ndarray[tuple[int], np.dtype[np.float64]],
 ) -> None:
-    stability_score = getattr(narrative_axes_module, "_axis_stability_score")
-
-    score = stability_score(matrix, axis_loadings)
+    score = _axis_stability_score(matrix, axis_loadings)
 
     assert 0.0 <= score <= 1.0
 

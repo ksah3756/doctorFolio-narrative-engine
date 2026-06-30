@@ -17,6 +17,7 @@ DEFAULT_EXPLAINED_VARIANCE_THRESHOLD: Final = 0.80
 DEFAULT_MAX_AXES: Final = 3
 DEFAULT_TYPE1_SHIFT_STRENGTH: Final = 1.0
 DEFAULT_CONTESTED_MASS_THRESHOLD: Final = 1.0
+DEFAULT_AXIS_STABILITY_THRESHOLD: Final = 0.70
 CONDITIONAL_PULL_DISCOUNT: Final = 0.5
 ZERO_VARIANCE_TOLERANCE: Final = 1e-12
 
@@ -176,6 +177,7 @@ def generate_type1_tension_axes(
     *,
     contested_mass_threshold: float = DEFAULT_CONTESTED_MASS_THRESHOLD,
     explained_variance_threshold: float = DEFAULT_EXPLAINED_VARIANCE_THRESHOLD,
+    stability_threshold: float = DEFAULT_AXIS_STABILITY_THRESHOLD,
     max_axes: int = DEFAULT_MAX_AXES,
 ) -> tuple[NarrativeAxis, ...]:
     """Generate v6.1 Type-1 axes from gated, centered claim-by-assumption pulls."""
@@ -185,6 +187,7 @@ def generate_type1_tension_axes(
         max_axes=max_axes,
     )
     _validate_contested_mass_threshold(contested_mass_threshold)
+    _validate_stability_threshold(stability_threshold)
     ordered_pulls = _ordered_claim_assumption_pulls(pulls)
     gate_results = evaluate_type1_assumption_mass_gates(
         ordered_pulls,
@@ -232,6 +235,8 @@ def generate_type1_tension_axes(
             [loadings[assumption_id] for assumption_id in assumption_ids],
             dtype=np.float64,
         )
+        if _axis_stability_score(matrix, loading_vector) < stability_threshold:
+            continue
         scores = matrix @ loading_vector
         if not _passes_axis_bipolar_mass_gate(
             claim_ids=claim_ids,
@@ -316,6 +321,11 @@ def _validate_axis_controls(
 def _validate_contested_mass_threshold(contested_mass_threshold: float) -> None:
     if not np.isfinite(contested_mass_threshold) or contested_mass_threshold <= 0.0:
         raise ValueError("contested_mass_threshold must be finite and positive")
+
+
+def _validate_stability_threshold(stability_threshold: float) -> None:
+    if not np.isfinite(stability_threshold) or not (0.0 <= stability_threshold <= 1.0):
+        raise ValueError("stability_threshold must be finite and in [0, 1]")
 
 
 def _signed_evidence_items(
@@ -452,6 +462,44 @@ def _weighted_claim_assumption_pull(pull: ClaimAssumptionPull) -> float:
     if not np.isfinite(weighted_pull):
         raise ValueError("weighted claim-assumption pull values must be finite")
     return float(weighted_pull)
+
+
+def _axis_stability_score(
+    matrix: NDArray[np.float64],
+    axis_loadings: NDArray[np.float64],
+    min_rows_for_stability: int = 2,
+) -> float:
+    """Return the conservative leave-one-out cosine for one dominant axis."""
+
+    n_rows = matrix.shape[0]
+    if n_rows < min_rows_for_stability + 1:
+        return 0.0
+
+    axis_norm = float(np.linalg.norm(axis_loadings))
+    if axis_norm <= ZERO_VARIANCE_TOLERANCE:
+        return 0.0
+
+    min_cosine = 1.0
+    for row_index in range(n_rows):
+        loo_matrix = np.delete(matrix, row_index, axis=0)
+        centered = loo_matrix - np.mean(loo_matrix, axis=0, keepdims=True)
+        if centered.shape[0] < min_rows_for_stability or np.allclose(
+            centered,
+            0.0,
+            atol=ZERO_VARIANCE_TOLERANCE,
+        ):
+            return 0.0
+
+        _, _, right_singular_vectors = np.linalg.svd(centered, full_matrices=False)
+        loo_loadings = right_singular_vectors[0, :]
+        loo_norm = float(np.linalg.norm(loo_loadings))
+        if loo_norm <= ZERO_VARIANCE_TOLERANCE:
+            return 0.0
+
+        cosine = abs(float(np.dot(axis_loadings, loo_loadings) / (axis_norm * loo_norm)))
+        min_cosine = min(min_cosine, cosine)
+
+    return float(np.clip(min_cosine, 0.0, 1.0))
 
 
 def _claim_weights_by_id(
