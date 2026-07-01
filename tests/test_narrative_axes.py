@@ -19,6 +19,7 @@ from dcf_engine.narrative_axes import (
     generate_narrative_axes,
     generate_type1_narrative_candidates,
     generate_type1_tension_axes,
+    generate_type1_tension_axis_diagnostics,
 )
 
 
@@ -65,6 +66,31 @@ def test_assumption_stage_a_gate_requires_positive_and_negative_weighted_mass() 
     assert growth.negative_mass == pytest.approx(0.70)
 
 
+def test_type1_diagnostics_preserve_stage_a_mass_gate_results() -> None:
+    pulls = (
+        ClaimAssumptionPull(claim_id="growth-up", assumption_id="growth", pull=0.80),
+        ClaimAssumptionPull(claim_id="growth-down", assumption_id="growth", pull=-0.70),
+        ClaimAssumptionPull(claim_id="margin-up", assumption_id="margin", pull=0.90),
+        ClaimAssumptionPull(claim_id="margin-down", assumption_id="margin", pull=-0.49),
+    )
+
+    diagnostics = generate_type1_tension_axis_diagnostics(
+        pulls,
+        contested_mass_threshold=0.50,
+    )
+
+    assert diagnostics.assumption_mass_gates == (
+        evaluate_type1_assumption_mass_gates(
+            pulls,
+            contested_mass_threshold=0.50,
+        )
+    )
+    assert {gate.assumption_id: gate.passes for gate in diagnostics.assumption_mass_gates} == {
+        "growth": True,
+        "margin": False,
+    }
+
+
 def test_centered_claim_by_assumption_matrix_recovers_bipolar_dominant_axis() -> None:
     pulls = (
         ClaimAssumptionPull(claim_id="optimistic-1", assumption_id="revenue_cagr", pull=2.0),
@@ -93,6 +119,35 @@ def test_centered_claim_by_assumption_matrix_recovers_bipolar_dominant_axis() ->
             "wacc": -1.0 / expected_scale,
         }
     )
+
+
+def test_type1_diagnostics_record_pca_scree_for_promoted_components() -> None:
+    pulls = (
+        ClaimAssumptionPull(claim_id="optimistic-1", assumption_id="revenue_cagr", pull=2.0),
+        ClaimAssumptionPull(claim_id="optimistic-1", assumption_id="margin", pull=1.0),
+        ClaimAssumptionPull(claim_id="optimistic-1", assumption_id="wacc", pull=-1.0),
+        ClaimAssumptionPull(claim_id="optimistic-2", assumption_id="revenue_cagr", pull=1.0),
+        ClaimAssumptionPull(claim_id="optimistic-2", assumption_id="margin", pull=0.5),
+        ClaimAssumptionPull(claim_id="optimistic-2", assumption_id="wacc", pull=-0.5),
+        ClaimAssumptionPull(claim_id="pessimistic-1", assumption_id="revenue_cagr", pull=-1.0),
+        ClaimAssumptionPull(claim_id="pessimistic-1", assumption_id="margin", pull=-0.5),
+        ClaimAssumptionPull(claim_id="pessimistic-1", assumption_id="wacc", pull=0.5),
+        ClaimAssumptionPull(claim_id="pessimistic-2", assumption_id="revenue_cagr", pull=-2.0),
+        ClaimAssumptionPull(claim_id="pessimistic-2", assumption_id="margin", pull=-1.0),
+        ClaimAssumptionPull(claim_id="pessimistic-2", assumption_id="wacc", pull=1.0),
+    )
+
+    diagnostics = generate_type1_tension_axis_diagnostics(
+        pulls,
+        contested_mass_threshold=1.0,
+    )
+
+    assert len(diagnostics.candidate_components) == 1
+    candidate = diagnostics.candidate_components[0]
+    assert candidate.explained_variance_ratio == pytest.approx(1.0)
+    assert candidate.cumulative_explained_variance_ratio == pytest.approx(1.0)
+    assert candidate.rejection_reason is None
+    assert candidate.promoted_axis == diagnostics.promoted_axes[0]
 
 
 def test_generate_narrative_axes_uses_claim_assumption_type1_entrypoint() -> None:
@@ -138,6 +193,32 @@ def test_stage_c_rejects_axis_when_one_score_side_lacks_weighted_claim_mass() ->
     axes = generate_type1_tension_axes(pulls, contested_mass_threshold=0.50)
 
     assert axes == ()
+
+
+def test_type1_diagnostics_record_pca_scree_for_rejected_components() -> None:
+    pulls = (
+        ClaimAssumptionPull(claim_id="majority-1", assumption_id="revenue_cagr", pull=1.0),
+        ClaimAssumptionPull(claim_id="majority-2", assumption_id="revenue_cagr", pull=1.0),
+        ClaimAssumptionPull(
+            claim_id="thin-outlier",
+            assumption_id="revenue_cagr",
+            pull=-20.0,
+            weight=0.10,
+        ),
+    )
+
+    diagnostics = generate_type1_tension_axis_diagnostics(
+        pulls,
+        contested_mass_threshold=0.50,
+        stability_threshold=0.0,
+    )
+
+    assert diagnostics.promoted_axes == ()
+    assert len(diagnostics.candidate_components) == 1
+    candidate = diagnostics.candidate_components[0]
+    assert candidate.explained_variance_ratio == pytest.approx(1.0)
+    assert candidate.cumulative_explained_variance_ratio == pytest.approx(1.0)
+    assert candidate.rejection_reason == "stage_c_bipolar_mass_below_threshold"
 
 
 def test_conditional_pull_enters_matrix_at_discounted_value() -> None:
@@ -233,6 +314,31 @@ def test_stability_gate_preserves_secondary_orthogonal_type1_axis() -> None:
     assert len(axes) == 2
 
 
+def test_type1_diagnostics_expose_axis_budget_rejection_reason() -> None:
+    pulls = (
+        ClaimAssumptionPull(claim_id="axis-1-positive", assumption_id="growth", pull=3.0),
+        ClaimAssumptionPull(claim_id="axis-1-negative", assumption_id="growth", pull=-3.0),
+        ClaimAssumptionPull(claim_id="axis-2-positive", assumption_id="margin", pull=1.0),
+        ClaimAssumptionPull(claim_id="axis-2-negative", assumption_id="margin", pull=-1.0),
+    )
+
+    diagnostics = generate_type1_tension_axis_diagnostics(
+        pulls,
+        contested_mass_threshold=1.0,
+        explained_variance_threshold=1.0,
+        max_axes=1,
+    )
+
+    assert len(diagnostics.promoted_axes) == 1
+    assert len(diagnostics.candidate_components) == 2
+    promoted_candidate = diagnostics.candidate_components[0]
+    rejected_candidate = diagnostics.candidate_components[1]
+    assert promoted_candidate.rejection_reason is None
+    assert promoted_candidate.promoted_axis is not None
+    assert rejected_candidate.rejection_reason == "axis_budget_already_filled"
+    assert rejected_candidate.promoted_axis is None
+
+
 def test_unstable_axis_is_rejected_by_stability_gate() -> None:
     pulls = (
         ClaimAssumptionPull(claim_id="positive", assumption_id="margin", pull=1.0),
@@ -242,6 +348,69 @@ def test_unstable_axis_is_rejected_by_stability_gate() -> None:
     axes = generate_type1_tension_axes(pulls, contested_mass_threshold=1.0)
 
     assert axes == ()
+
+
+def test_type1_diagnostics_expose_stability_rejection_reason() -> None:
+    pulls = (
+        ClaimAssumptionPull(claim_id="positive", assumption_id="margin", pull=1.0),
+        ClaimAssumptionPull(claim_id="negative", assumption_id="margin", pull=-1.0),
+    )
+
+    diagnostics = generate_type1_tension_axis_diagnostics(
+        pulls,
+        contested_mass_threshold=1.0,
+    )
+
+    assert diagnostics.promoted_axes == ()
+    assert len(diagnostics.candidate_components) == 1
+    candidate = diagnostics.candidate_components[0]
+    assert candidate.stability_score == pytest.approx(0.0)
+    assert candidate.rejection_reason == "stability_below_threshold"
+
+
+def test_type1_diagnostics_expose_stage_c_mass_rejection_reason() -> None:
+    pulls = (
+        ClaimAssumptionPull(claim_id="majority-1", assumption_id="revenue_cagr", pull=1.0),
+        ClaimAssumptionPull(claim_id="majority-2", assumption_id="revenue_cagr", pull=1.0),
+        ClaimAssumptionPull(
+            claim_id="thin-outlier",
+            assumption_id="revenue_cagr",
+            pull=-20.0,
+            weight=0.10,
+        ),
+    )
+
+    diagnostics = generate_type1_tension_axis_diagnostics(
+        pulls,
+        contested_mass_threshold=0.50,
+        stability_threshold=0.0,
+    )
+
+    candidate = diagnostics.candidate_components[0]
+    assert candidate.rejection_reason == "stage_c_bipolar_mass_below_threshold"
+    assert candidate.stage_c_mass_gate.positive_mass == pytest.approx(2.0)
+    assert candidate.stage_c_mass_gate.negative_mass == pytest.approx(0.10)
+    assert candidate.stage_c_mass_gate.passes is False
+
+
+def test_type1_diagnostics_promoted_axes_match_existing_api_output() -> None:
+    pulls = (
+        ClaimAssumptionPull(claim_id="positive-1", assumption_id="margin", pull=1.0),
+        ClaimAssumptionPull(claim_id="positive-2", assumption_id="margin", pull=1.0),
+        ClaimAssumptionPull(claim_id="positive-3", assumption_id="margin", pull=1.0),
+        ClaimAssumptionPull(claim_id="negative-1", assumption_id="margin", pull=-1.0),
+        ClaimAssumptionPull(claim_id="negative-2", assumption_id="margin", pull=-1.0),
+    )
+
+    diagnostics = generate_type1_tension_axis_diagnostics(
+        pulls,
+        contested_mass_threshold=1.0,
+    )
+
+    assert diagnostics.promoted_axes == generate_type1_tension_axes(
+        pulls,
+        contested_mass_threshold=1.0,
+    )
 
 
 def test_outlier_supported_axis_fails_stability_when_outlier_removed() -> None:
