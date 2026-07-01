@@ -125,6 +125,22 @@ def test_low_overlap_claims_are_saved_to_quarantine_artifact(tmp_path: Path) -> 
     assert store.load_all_claims(include_quarantined=True) == [low_overlap_claim]
 
 
+def test_boundary_overlap_claim_is_trusted_and_loaded_by_default(tmp_path: Path) -> None:
+    store = JsonClaimStore(tmp_path)
+    boundary_claim = _claim(
+        claim_id="claim-boundary-overlap",
+        chunk_id="nvda-doc-0001",
+        verbatim_overlap=0.8,
+    )
+
+    store.save_claims("nvda-doc-0001", [boundary_claim])
+
+    claims_path = tmp_path / "nvda/claims/nvda-doc-0001.json"
+    assert claims_path.exists()
+    assert not (tmp_path / "nvda/quarantined_claims/nvda-doc-0001.json").exists()
+    assert store.load_all_claims() == [boundary_claim]
+
+
 def test_load_all_claims_can_include_quarantined_claims_for_audit(tmp_path: Path) -> None:
     store = JsonClaimStore(tmp_path)
     trusted_claim = _claim(claim_id="claim-trusted", chunk_id="nvda-doc-0001")
