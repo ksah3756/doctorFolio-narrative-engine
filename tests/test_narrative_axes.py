@@ -77,6 +77,15 @@ def test_type1_claim_bridge_omits_bridge_only_capital_structure_claims() -> None
     assert pulls == ()
 
 
+def test_type1_claim_bridge_rejects_unknown_assumption_filter_ids() -> None:
+    with pytest.raises(ValueError, match="unknown assumption_ids: REVNEUE_CAGR"):
+        build_type1_claim_assumption_pulls(
+            [_claim("DEMAND_SIGNAL", "INCREASE", claim_id="demand-up")],
+            stage="growth",
+            assumption_ids=("REVNEUE_CAGR",),
+        )
+
+
 def test_type1_claim_bridge_deduplicates_to_strongest_economic_driver() -> None:
     weaker = _claim(
         "DEMAND_SIGNAL",
