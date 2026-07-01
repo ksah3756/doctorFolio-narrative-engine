@@ -506,7 +506,19 @@ def test_edgar_reader_errors_and_malformed_indexes_are_skipped() -> None:
         if url in {direct_error_href, primary_error_href}:
             raise OSError("network read failed")
         if url == malformed_index_href:
-            return _filing_index_html("/Archives/edgar/data/1045810/exhibit991.htm")
+            return """<!doctype html>
+<html>
+  <body>
+    <table class="tableFile" summary="Document Format Files">
+      <tr><th>Document</th><th>Type</th></tr>
+      <tr>
+        <td><a href="/Archives/edgar/data/1045810/exhibit991.htm">exhibit991.htm</a></td>
+        <td>EX-99.1</td>
+      </tr>
+    </table>
+  </body>
+</html>
+"""
         if url == primary_error_index_href:
             return _filing_index_html(
                 "/Archives/edgar/data/1045810/000104581026000131/nvda-20260625.htm"
