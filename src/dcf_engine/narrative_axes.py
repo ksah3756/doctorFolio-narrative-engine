@@ -10,8 +10,11 @@ import numpy as np
 from numpy.typing import NDArray
 
 from dcf_engine.assumption import AssumptionState
+from dcf_engine.claim import Claim
 from dcf_engine.lifecycle import LifecycleStage
+from dcf_engine.loading import LOADING
 from dcf_engine.narrative import Narrative, NarrativeContainer
+from dcf_engine.routing import _routing_for_driver, claims_to_economic_drivers, factor_shift
 
 DEFAULT_EXPLAINED_VARIANCE_THRESHOLD: Final = 0.80
 DEFAULT_MAX_AXES: Final = 3
@@ -353,6 +356,53 @@ def generate_type1_tension_axis_diagnostics(
     )
 
 
+def build_type1_claim_assumption_pulls(
+    claims: Sequence[Claim],
+    *,
+    stage: LifecycleStage,
+    assumption_ids: Sequence[str] | None = None,
+    tam_structure: TamStructure | None = None,
+) -> tuple[ClaimAssumptionPull, ...]:
+    """Project real claims into deterministic Type-1 claim-assumption pull rows."""
+
+    selected_assumption_ids = _selected_type1_assumption_ids(assumption_ids)
+    drivers = claims_to_economic_drivers(list(claims))
+    if not drivers:
+        return ()
+
+    has_margin_recovery = any(
+        driver.name == "gross_margin" and driver.direction == "INCREASE"
+        for driver in drivers
+    )
+    measurement_tam_structure = {} if tam_structure is None else dict(tam_structure)
+
+    rows: list[ClaimAssumptionPull] = []
+    for driver in drivers:
+        # Economic-driver compression happens before matrix construction, matching routing.
+        factor_values: dict[str, float] = {
+            factor_name: factor_shift(driver.claim, intensity, stage)
+            for factor_name, intensity in _routing_for_driver(
+                driver,
+                has_margin_recovery=has_margin_recovery,
+            ).items()
+        }
+        for assumption_id in selected_assumption_ids:
+            pull_value = _type1_assumption_pull_value(assumption_id, factor_values)
+            if abs(pull_value) <= ZERO_VARIANCE_TOLERANCE:
+                continue
+            rows.append(
+                ClaimAssumptionPull(
+                    claim_id=driver.claim.claim_id,
+                    assumption_id=assumption_id,
+                    pull=pull_value,
+                    lifecycle_stage=stage,
+                    tam_structure=measurement_tam_structure,
+                )
+            )
+
+    return tuple(sorted(rows, key=lambda row: (row.assumption_id, row.claim_id)))
+
+
 def generate_narrative_axes(
     pulls: Sequence[ClaimAssumptionPull] | Sequence[PullSignature],
     *,
@@ -385,6 +435,38 @@ def _claim_assumption_pulls_for_public_entrypoint(
             )
         claim_assumption_pulls.append(pull)
     return tuple(claim_assumption_pulls)
+
+
+def _selected_type1_assumption_ids(
+    assumption_ids: Sequence[str] | None,
+) -> tuple[str, ...]:
+    if assumption_ids is None:
+        return tuple(sorted(LOADING))
+    if not assumption_ids:
+        raise ValueError("assumption_ids must be non-empty when provided")
+    if any(not assumption_id.strip() for assumption_id in assumption_ids):
+        raise ValueError("assumption_ids must be non-empty")
+    duplicate_ids = {
+        assumption_id for assumption_id in assumption_ids if assumption_ids.count(assumption_id) > 1
+    }
+    if duplicate_ids:
+        ordered_duplicates = ", ".join(sorted(duplicate_ids))
+        raise ValueError(f"duplicate assumption_ids: {ordered_duplicates}")
+    return tuple(assumption_ids)
+
+
+def _type1_assumption_pull_value(
+    assumption_id: str,
+    factor_values: Mapping[str, float],
+) -> float:
+    pull = sum(
+        factor_values[factor_name] * loading
+        for factor_name, loading in LOADING.get(assumption_id, {}).items()
+        if factor_name in factor_values
+    )
+    if not np.isfinite(pull):
+        raise ValueError("claim-assumption pull values must be finite")
+    return float(pull)
 
 
 def _validate_axis_controls(

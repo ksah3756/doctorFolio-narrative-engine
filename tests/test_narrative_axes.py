@@ -3,8 +3,15 @@ from datetime import date
 import numpy as np
 import pytest
 
-from dcf_engine.claim import Claim, ClaimDirection, ClaimSubject, ExtractionQuality, SourceRef
 from dcf_engine.assumption import AssumptionState, ScaleSpec
+from dcf_engine.claim import (
+    Claim,
+    ClaimDirection,
+    ClaimSubject,
+    ExtractionQuality,
+    MagnitudeQualifier,
+    SourceRef,
+)
 from dcf_engine.distributions import DistributionFamily
 from dcf_engine.loading import resolved_mu
 from dcf_engine.narrative import NarrativeScenarioSet
@@ -899,7 +906,7 @@ def _claim(
     direction: ClaimDirection,
     *,
     claim_id: str,
-    magnitude_qualifier: str = "STRONG",
+    magnitude_qualifier: MagnitudeQualifier = "STRONG",
     text: str = "NVDA narrative claim.",
     instrument_type: str | None = None,
 ) -> Claim:
