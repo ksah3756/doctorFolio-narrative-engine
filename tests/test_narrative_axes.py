@@ -22,8 +22,8 @@ from dcf_engine.narrative_axes import (
 )
 
 
-def test_rejects_empty_signature_inputs() -> None:
-    with pytest.raises(ValueError, match="non-empty"):
+def test_generate_narrative_axes_rejects_empty_claim_assumption_pulls() -> None:
+    with pytest.raises(ValueError, match="claim-assumption pulls must be non-empty"):
         generate_narrative_axes(())
 
 
@@ -91,6 +91,34 @@ def test_centered_claim_by_assumption_matrix_recovers_bipolar_dominant_axis() ->
             "margin": 1.0 / expected_scale,
             "revenue_cagr": 2.0 / expected_scale,
             "wacc": -1.0 / expected_scale,
+        }
+    )
+
+
+def test_generate_narrative_axes_uses_claim_assumption_type1_entrypoint() -> None:
+    pulls = (
+        ClaimAssumptionPull(claim_id="optimistic", assumption_id="revenue_cagr", pull=2.0),
+        ClaimAssumptionPull(claim_id="optimistic", assumption_id="margin", pull=1.0),
+        ClaimAssumptionPull(claim_id="pessimistic", assumption_id="revenue_cagr", pull=-2.0),
+        ClaimAssumptionPull(claim_id="pessimistic", assumption_id="margin", pull=-1.0),
+    )
+
+    axes = generate_narrative_axes(
+        pulls,
+        contested_mass_threshold=1.0,
+        stability_threshold=0.0,
+    )
+
+    assert axes == generate_type1_tension_axes(
+        pulls,
+        contested_mass_threshold=1.0,
+        stability_threshold=0.0,
+    )
+    expected_scale = np.sqrt(5.0)
+    assert axes[0].loadings == pytest.approx(
+        {
+            "margin": 1.0 / expected_scale,
+            "revenue_cagr": 2.0 / expected_scale,
         }
     )
 
@@ -325,7 +353,7 @@ def test_contested_pull_signature_preserves_measurement_axis_metadata() -> None:
     assert signature.values == pytest.approx((75.0,))
 
 
-def test_built_pull_signatures_feed_narrative_axis_generation_deterministically() -> None:
+def test_legacy_pull_signatures_are_rejected_as_type1_axis_entrypoint() -> None:
     signatures = (
         build_pull_signature(
             ContestedAssumptionPullInput(
@@ -343,13 +371,8 @@ def test_built_pull_signatures_feed_narrative_axis_generation_deterministically(
         ),
     )
 
-    first_axes = generate_narrative_axes(signatures)
-    second_axes = generate_narrative_axes(signatures)
-
-    assert first_axes == second_axes
-    assert first_axes[0].loadings == pytest.approx(
-        {"revenue_cagr": 3.0 / np.sqrt(10.0), "wacc": -1.0 / np.sqrt(10.0)}
-    )
+    with pytest.raises(ValueError, match="ClaimAssumptionPull"):
+        generate_narrative_axes(signatures)
 
 
 def test_rejects_empty_contested_evidence() -> None:
@@ -397,93 +420,36 @@ def test_rejects_malformed_contested_evidence_vectors() -> None:
         build_pull_signature(contested)
 
 
-def test_rejects_signature_vectors_with_mismatched_shapes() -> None:
-    signatures = (
-        PullSignature(assumption_id="revenue_cagr", values=(0.20, 0.10)),
-        PullSignature(assumption_id="operating_margin", values=(0.30,)),
+def test_rejects_duplicate_claim_assumption_cells() -> None:
+    pulls = (
+        ClaimAssumptionPull(claim_id="claim-1", assumption_id="revenue_cagr", pull=0.20),
+        ClaimAssumptionPull(claim_id="claim-1", assumption_id="revenue_cagr", pull=-0.10),
     )
 
-    with pytest.raises(ValueError, match="same shape"):
-        generate_narrative_axes(signatures)
+    with pytest.raises(ValueError, match="unique per claim and assumption"):
+        generate_narrative_axes(pulls)
 
 
 @pytest.mark.parametrize("bad_value", [float("nan"), float("inf"), float("-inf")])
-def test_rejects_nan_or_infinite_signature_values(bad_value: float) -> None:
-    signatures = (
-        PullSignature(assumption_id="revenue_cagr", values=(0.20, bad_value)),
-        PullSignature(assumption_id="operating_margin", values=(0.30, 0.40)),
+def test_rejects_nan_or_infinite_claim_assumption_pulls(bad_value: float) -> None:
+    pulls = (
+        ClaimAssumptionPull(claim_id="claim-1", assumption_id="revenue_cagr", pull=bad_value),
+        ClaimAssumptionPull(claim_id="claim-2", assumption_id="revenue_cagr", pull=-0.40),
     )
 
     with pytest.raises(ValueError, match="finite"):
+        generate_narrative_axes(pulls)
+
+
+def test_legacy_pull_signatures_cannot_promote_unanimous_consensus_to_axis() -> None:
+    signatures = (
+        PullSignature(assumption_id="revenue_cagr", values=(3.0, 0.0)),
+        PullSignature(assumption_id="operating_margin", values=(2.0, 0.0)),
+        PullSignature(assumption_id="tam", values=(1.0, 0.0)),
+    )
+
+    with pytest.raises(ValueError, match="aggregated PullSignature"):
         generate_narrative_axes(signatures)
-
-
-def test_recovers_dominant_component_for_synthetic_one_axis_contested_set() -> None:
-    signatures = (
-        PullSignature(assumption_id="a_revenue_cagr", values=(3.0, 0.0)),
-        PullSignature(assumption_id="b_operating_margin", values=(2.0, 0.0)),
-        PullSignature(assumption_id="c_wacc", values=(-1.0, 0.0)),
-    )
-
-    axes = generate_narrative_axes(signatures)
-
-    assert len(axes) == 1
-    assert axes[0].explained_variance_ratio == pytest.approx(1.0)
-    expected_scale = np.sqrt(14.0)
-    assert axes[0].loadings == pytest.approx(
-        {
-            "a_revenue_cagr": 3.0 / expected_scale,
-            "b_operating_margin": 2.0 / expected_scale,
-            "c_wacc": -1.0 / expected_scale,
-        }
-    )
-
-
-def test_respects_explained_variance_threshold_and_max_axes_cap() -> None:
-    signatures = (
-        PullSignature(assumption_id="a_revenue_cagr", values=(3.0, 0.0, 0.0)),
-        PullSignature(assumption_id="b_operating_margin", values=(0.0, 2.0, 0.0)),
-        PullSignature(assumption_id="c_wacc", values=(0.0, 0.0, 1.0)),
-    )
-
-    axes = generate_narrative_axes(
-        signatures,
-        explained_variance_threshold=0.95,
-        max_axes=2,
-    )
-
-    assert len(axes) == 2
-    assert sum(axis.explained_variance_ratio for axis in axes) == pytest.approx(13.0 / 14.0)
-
-
-def test_uses_deterministic_component_orientation_for_repeated_runs() -> None:
-    signatures = (
-        PullSignature(assumption_id="b_operating_margin", values=(-2.0, 0.0)),
-        PullSignature(assumption_id="a_revenue_cagr", values=(-3.0, 0.0)),
-        PullSignature(assumption_id="c_wacc", values=(1.0, 0.0)),
-    )
-
-    first_axes = generate_narrative_axes(signatures)
-    second_axes = generate_narrative_axes(signatures)
-
-    assert first_axes == second_axes
-    assert first_axes[0].loadings["a_revenue_cagr"] > 0.0
-
-
-def test_preserves_stable_assumption_id_ordering_in_returned_axis_loadings() -> None:
-    signatures = (
-        PullSignature(assumption_id="wacc", values=(1.0, 0.0)),
-        PullSignature(assumption_id="revenue_cagr", values=(2.0, 0.0)),
-        PullSignature(assumption_id="operating_margin", values=(3.0, 0.0)),
-    )
-
-    axes = generate_narrative_axes(signatures)
-
-    assert tuple(axes[0].loadings) == (
-        "operating_margin",
-        "revenue_cagr",
-        "wacc",
-    )
 
 
 def test_narrative_axis_creates_positive_and_negative_type1_candidates() -> None:
