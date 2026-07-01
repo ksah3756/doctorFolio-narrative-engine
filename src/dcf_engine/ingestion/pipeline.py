@@ -41,6 +41,7 @@ class IngestionResult:
     chunks_processed: int
     chunks_rejected: int
     claims_saved: int
+    claims_quarantined: int
     errors: tuple[IngestionError, ...]
 
     @property
@@ -56,6 +57,7 @@ class _IngestionCounters:
     chunks_processed: int = 0
     chunks_rejected: int = 0
     claims_saved: int = 0
+    claims_quarantined: int = 0
 
 
 def run_ingestion_pipeline(
@@ -128,8 +130,10 @@ def run_ingestion_pipeline(
                     )
                     continue
 
+                quarantined_claims = store.quarantined_claim_count(response.claims)
                 store.save_claims(chunk.chunk_id, response.claims)
-                counters.claims_saved += len(response.claims)
+                counters.claims_saved += len(response.claims) - quarantined_claims
+                counters.claims_quarantined += quarantined_claims
 
             # save_source가 processed 표시까지 담당하므로 문서 단위 작업 뒤에 호출한다.
             store.save_source(document)
@@ -142,6 +146,7 @@ def run_ingestion_pipeline(
         chunks_processed=counters.chunks_processed,
         chunks_rejected=counters.chunks_rejected,
         claims_saved=counters.claims_saved,
+        claims_quarantined=counters.claims_quarantined,
         errors=tuple(errors),
     )
 

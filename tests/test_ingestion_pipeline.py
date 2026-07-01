@@ -105,7 +105,7 @@ def _rss_reader(feed_text: str) -> Callable[[str], str]:
     return read
 
 
-def _claim(*, claim_id: str, chunk_id: str) -> Claim:
+def _claim(*, claim_id: str, chunk_id: str, verbatim_overlap: float = 0.9) -> Claim:
     return Claim(
         claim_id=claim_id,
         claim_text="Data center revenue increased as cloud customers expanded deployment plans.",
@@ -114,7 +114,7 @@ def _claim(*, claim_id: str, chunk_id: str) -> Claim:
         direction="INCREASE",
         magnitude_qualifier="STRONG",
         extraction_quality=ExtractionQuality(
-            verbatim_overlap=0.9,
+            verbatim_overlap=verbatim_overlap,
             numeric_consistency=True,
             temporal_consistency=True,
             entity_consistency=True,
@@ -228,6 +228,9 @@ def test_schema_invalid_response_rejects_chunk_without_saving_claims(tmp_path: P
     assert result.error_count == 1
     assert result.errors[0].chunk_id == chunk_id
     assert store.load_all_claims() == []
+    assert store.load_all_claims(include_quarantined=True) == []
+    assert not (tmp_path / "nvda/claims/invalid-doc-0001.json").exists()
+    assert not (tmp_path / "nvda/quarantined_claims/invalid-doc-0001.json").exists()
 
 
 @pytest.mark.parametrize("mismatch", ["chunk_ref", "source_ref", "published_date"])
@@ -260,6 +263,37 @@ def test_claim_provenance_mismatch_rejects_chunk_without_saving_claims(
     assert result.errors[0].chunk_id == chunk_id
     assert "claim provenance" in result.errors[0].message
     assert store.load_all_claims() == []
+
+
+def test_pipeline_quarantines_low_overlap_claims_without_trusting_them(
+    tmp_path: Path,
+) -> None:
+    store = JsonClaimStore(tmp_path)
+    document = _document(doc_id="low-overlap-doc")
+    chunk_id = "low-overlap-doc-0001"
+    low_overlap_claim = _claim(
+        claim_id="claim-low-overlap",
+        chunk_id=chunk_id,
+        verbatim_overlap=0.79,
+    )
+    extractor = RecordingExtractor(
+        {chunk_id: _response(chunk_id=chunk_id, claims=[low_overlap_claim])}
+    )
+
+    result = run_ingestion_pipeline(
+        fetchers=[FixtureFetcher([document])], store=store, extractor=extractor
+    )
+
+    assert result.documents_processed == 1
+    assert result.chunks_processed == 1
+    assert result.chunks_rejected == 0
+    assert result.claims_saved == 0
+    assert result.claims_quarantined == 1
+    assert result.error_count == 0
+    assert store.load_all_claims() == []
+    assert store.load_all_claims(include_quarantined=True) == [low_overlap_claim]
+    assert not (tmp_path / "nvda/claims/low-overlap-doc-0001.json").exists()
+    assert (tmp_path / "nvda/quarantined_claims/low-overlap-doc-0001.json").exists()
 
 
 def test_extractor_exception_is_captured_and_later_chunks_continue(tmp_path: Path) -> None:

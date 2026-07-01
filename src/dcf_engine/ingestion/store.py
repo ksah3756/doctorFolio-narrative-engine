@@ -16,6 +16,9 @@ from dcf_engine.ingestion.fetcher import SourceDocument
 _DEFAULT_TICKER: Final[str] = "NVDA"
 _STATE_FILE: Final[str] = "pipeline_state.json"
 _INVALID_ARTIFACT_IDS: Final[frozenset[str]] = frozenset({"", ".", ".."})
+_CLAIMS_DIR: Final[str] = "claims"
+_QUARANTINED_CLAIMS_DIR: Final[str] = "quarantined_claims"
+_MIN_TRUSTED_VERBATIM_OVERLAP: Final[float] = 0.8
 
 
 class JsonClaimStoreError(RuntimeError):
@@ -64,17 +67,40 @@ class JsonClaimStore:
         return chunk
 
     def save_claims(self, chunk_id: str, claims: list[Claim]) -> None:
-        self._write_json(
-            _artifact_path(self._ticker_dir(self._ticker) / "claims", chunk_id),
-            [claim.model_dump(mode="json") for claim in claims],
+        trusted_claims, quarantined_claims = _partition_claims_by_overlap(claims)
+        normal_path = _artifact_path(self._ticker_dir(self._ticker) / _CLAIMS_DIR, chunk_id)
+        quarantine_path = _artifact_path(
+            self._ticker_dir(self._ticker) / _QUARANTINED_CLAIMS_DIR, chunk_id
         )
 
-    def load_all_claims(self, *, ticker: str | None = None) -> list[Claim]:
-        claims_dir = self._ticker_dir(ticker or self._ticker) / "claims"
-        if not claims_dir.exists():
-            return []
+        if trusted_claims or not claims:
+            self._write_claims(normal_path, trusted_claims)
+        else:
+            _remove_if_exists(normal_path)
+        if quarantined_claims:
+            self._write_claims(quarantine_path, quarantined_claims)
+        else:
+            _remove_if_exists(quarantine_path)
 
+    def load_all_claims(
+        self, *, ticker: str | None = None, include_quarantined: bool = False
+    ) -> list[Claim]:
+        ticker_dir = self._ticker_dir(ticker or self._ticker)
+        claims = self._load_claims_from_dir(ticker_dir / _CLAIMS_DIR)
+        if include_quarantined:
+            claims.extend(self._load_claims_from_dir(ticker_dir / _QUARANTINED_CLAIMS_DIR))
+        return claims
+
+    @staticmethod
+    def quarantined_claim_count(claims: list[Claim]) -> int:
+        return len(_quarantined_claims(claims))
+
+    @staticmethod
+    def _load_claims_from_dir(claims_dir: Path) -> list[Claim]:
         claims: list[Claim] = []
+        if not claims_dir.exists():
+            return claims
+
         for path in sorted(claims_dir.glob("*.json")):
             data = _read_json(path)
             if not isinstance(data, list):
@@ -120,6 +146,39 @@ class JsonClaimStore:
     def _write_json(path: Path, payload: object) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+
+    @staticmethod
+    def _write_claims(path: Path, claims: list[Claim]) -> None:
+        JsonClaimStore._write_json(
+            path,
+            [claim.model_dump(mode="json") for claim in claims],
+        )
+
+
+def _partition_claims_by_overlap(claims: list[Claim]) -> tuple[list[Claim], list[Claim]]:
+    trusted: list[Claim] = []
+    quarantined: list[Claim] = []
+    for claim in claims:
+        if claim.extraction_quality.verbatim_overlap < _MIN_TRUSTED_VERBATIM_OVERLAP:
+            quarantined.append(claim)
+        else:
+            trusted.append(claim)
+    return trusted, quarantined
+
+
+def _quarantined_claims(claims: list[Claim]) -> list[Claim]:
+    return [
+        claim
+        for claim in claims
+        if claim.extraction_quality.verbatim_overlap < _MIN_TRUSTED_VERBATIM_OVERLAP
+    ]
+
+
+def _remove_if_exists(path: Path) -> None:
+    try:
+        path.unlink()
+    except FileNotFoundError:
+        return
 
 
 def _artifact_path(directory: Path, artifact_id: str) -> Path:
