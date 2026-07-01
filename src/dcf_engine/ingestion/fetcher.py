@@ -205,7 +205,11 @@ def _document_from_entry(
     ):
         return None
 
-    document_url, document_text = _resolve_filing_document(url, filing_type, reader)
+    try:
+        # EDGAR 항목은 독립 입력이므로 한 문서 읽기 실패가 전체 피드를 막지 않게 한다.
+        document_url, document_text = _resolve_filing_document(url, filing_type, reader)
+    except (OSError, TypeError, UnicodeError):
+        return None
     raw_text = _filing_body_text(document_text)
     if raw_text is None:
         return None

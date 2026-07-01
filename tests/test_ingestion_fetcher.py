@@ -478,6 +478,61 @@ def test_edgar_entry_with_empty_or_unusable_filing_body_is_skipped() -> None:
     assert docs[0].raw_text == "Filing document Valid filing body after unusable filing."
 
 
+def test_edgar_reader_errors_and_malformed_indexes_are_skipped() -> None:
+    direct_error_href = "https://www.sec.gov/Archives/edgar/data/1045810/direct-error.htm"
+    malformed_index_href = (
+        "https://www.sec.gov/Archives/edgar/data/1045810/"
+        "000104581026000130/0001045810-26-000130-index.htm"
+    )
+    primary_error_index_href = (
+        "https://www.sec.gov/Archives/edgar/data/1045810/"
+        "000104581026000131/0001045810-26-000131-index.htm"
+    )
+    primary_error_href = (
+        "https://www.sec.gov/Archives/edgar/data/1045810/"
+        "000104581026000131/nvda-20260625.htm"
+    )
+    valid_href = "https://www.sec.gov/Archives/edgar/data/1045810/valid-after-errors.htm"
+    feed = _edgar_feed(
+        _entry(title="8-K - read error", href=direct_error_href, filing_type="8-K")
+        + _entry(title="8-K - malformed index", href=malformed_index_href, filing_type="8-K")
+        + _entry(title="8-K - primary read error", href=primary_error_index_href, filing_type="8-K")
+        + _entry(title="8-K - valid", href=valid_href, filing_type="8-K")
+    )
+
+    def read(url: str) -> str:
+        if "output=atom" in url:
+            return feed
+        if url in {direct_error_href, primary_error_href}:
+            raise OSError("network read failed")
+        if url == malformed_index_href:
+            return """<!doctype html>
+<html>
+  <body>
+    <table class="tableFile" summary="Document Format Files">
+      <tr><th>Document</th><th>Type</th></tr>
+      <tr>
+        <td><a href="/Archives/edgar/data/1045810/exhibit991.htm">exhibit991.htm</a></td>
+        <td>EX-99.1</td>
+      </tr>
+    </table>
+  </body>
+</html>
+"""
+        if url == primary_error_index_href:
+            return _filing_index_html(
+                "/Archives/edgar/data/1045810/000104581026000131/nvda-20260625.htm"
+            )
+        if url == valid_href:
+            return _filing_html("Valid filing body after reader errors.")
+        raise AssertionError(f"unexpected URL read: {url}")
+
+    docs = EdgarRssFetcher(reader=read).fetch_recent("8-K", count=10)
+
+    assert [doc.url for doc in docs] == [valid_href]
+    assert docs[0].raw_text == "Filing document Valid filing body after reader errors."
+
+
 def test_reuters_rss_returns_only_nvda_relevant_source_documents() -> None:
     nvda_href = "https://www.reuters.com/technology/nvidia-blackwell-demand-2026-06-24/"
     feed = _rss_feed(
