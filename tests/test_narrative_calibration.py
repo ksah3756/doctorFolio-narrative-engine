@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
+from pathlib import Path
 
 import pytest
 
@@ -12,7 +15,8 @@ from dcf_engine.narrative_calibration import (
     default_type1_tension_calibration_scenarios,
     report_to_json,
 )
-from scripts.calibrate_type1_tension import main
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_stable_bipolar_fixture_records_promoted_axis() -> None:
@@ -117,9 +121,11 @@ def test_invalid_threshold_grids_fail_with_clear_validation_errors() -> None:
         )
 
 
-def test_cli_outputs_json_with_rows_and_summary_counts(capsys: pytest.CaptureFixture[str]) -> None:
-    exit_code = main(
+def test_cli_outputs_json_with_rows_and_summary_counts() -> None:
+    result = subprocess.run(
         [
+            sys.executable,
+            str(REPO_ROOT / "scripts/calibrate_type1_tension.py"),
             "--scenario",
             "stable-bipolar",
             "--contested-mass-threshold",
@@ -128,11 +134,13 @@ def test_cli_outputs_json_with_rows_and_summary_counts(capsys: pytest.CaptureFix
             "0.70",
             "--explained-variance-threshold",
             "0.80",
-        ]
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
     )
 
-    assert exit_code == 0
-    payload = json.loads(capsys.readouterr().out)
+    payload = json.loads(result.stdout)
     assert payload["summary"] == {
         "scenario_count": 1,
         "row_count": 1,
@@ -210,7 +218,8 @@ def _thin_outlier_scenario() -> Type1CalibrationScenario:
         scenario_id="thin-outlier-driven",
         pulls=(
             ClaimAssumptionPull(claim_id="majority-1", assumption_id="revenue_cagr", pull=1.0),
-            ClaimAssumptionPull(claim_id="majority-2", assumption_id="revenue_cagr", pull=1.0),
+            ClaimAssumptionPull(claim_id="majority-2", assumption_id="revenue_cagr", pull=1.1),
+            ClaimAssumptionPull(claim_id="majority-3", assumption_id="revenue_cagr", pull=0.9),
             ClaimAssumptionPull(
                 claim_id="thin-outlier",
                 assumption_id="revenue_cagr",
