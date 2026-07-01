@@ -314,6 +314,31 @@ def test_stability_gate_preserves_secondary_orthogonal_type1_axis() -> None:
     assert len(axes) == 2
 
 
+def test_type1_diagnostics_expose_axis_budget_rejection_reason() -> None:
+    pulls = (
+        ClaimAssumptionPull(claim_id="axis-1-positive", assumption_id="growth", pull=3.0),
+        ClaimAssumptionPull(claim_id="axis-1-negative", assumption_id="growth", pull=-3.0),
+        ClaimAssumptionPull(claim_id="axis-2-positive", assumption_id="margin", pull=1.0),
+        ClaimAssumptionPull(claim_id="axis-2-negative", assumption_id="margin", pull=-1.0),
+    )
+
+    diagnostics = generate_type1_tension_axis_diagnostics(
+        pulls,
+        contested_mass_threshold=1.0,
+        explained_variance_threshold=1.0,
+        max_axes=1,
+    )
+
+    assert len(diagnostics.promoted_axes) == 1
+    assert len(diagnostics.candidate_components) == 2
+    promoted_candidate = diagnostics.candidate_components[0]
+    rejected_candidate = diagnostics.candidate_components[1]
+    assert promoted_candidate.rejection_reason is None
+    assert promoted_candidate.promoted_axis is not None
+    assert rejected_candidate.rejection_reason == "axis_budget_already_filled"
+    assert rejected_candidate.promoted_axis is None
+
+
 def test_unstable_axis_is_rejected_by_stability_gate() -> None:
     pulls = (
         ClaimAssumptionPull(claim_id="positive", assumption_id="margin", pull=1.0),
