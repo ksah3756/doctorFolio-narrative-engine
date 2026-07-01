@@ -1,6 +1,9 @@
+from datetime import date
+
 import numpy as np
 import pytest
 
+from dcf_engine.claim import Claim, ClaimDirection, ClaimSubject, ExtractionQuality, SourceRef
 from dcf_engine.assumption import AssumptionState, ScaleSpec
 from dcf_engine.distributions import DistributionFamily
 from dcf_engine.loading import resolved_mu
@@ -15,12 +18,129 @@ from dcf_engine.narrative_axes import (
     _centered_claim_assumption_matrix,
     _weighted_claim_assumption_pull,
     build_pull_signature,
+    build_type1_claim_assumption_pulls,
     evaluate_type1_assumption_mass_gates,
     generate_narrative_axes,
     generate_type1_narrative_candidates,
     generate_type1_tension_axes,
     generate_type1_tension_axis_diagnostics,
 )
+
+
+def test_type1_claim_bridge_maps_demand_increase_to_growth_upside_pulls() -> None:
+    pulls = build_type1_claim_assumption_pulls(
+        [_claim("DEMAND_SIGNAL", "INCREASE", claim_id="demand-up")],
+        stage="growth",
+        assumption_ids=("REVENUE_CAGR", "OPERATING_MARGIN"),
+    )
+
+    by_assumption = {pull.assumption_id: pull for pull in pulls}
+
+    assert by_assumption["REVENUE_CAGR"].claim_id == "demand-up"
+    assert by_assumption["REVENUE_CAGR"].pull > 0.0
+    assert by_assumption["OPERATING_MARGIN"].pull > 0.0
+
+
+def test_type1_claim_bridge_preserves_cost_increase_valuation_signs() -> None:
+    pulls = build_type1_claim_assumption_pulls(
+        [_claim("COST_SIGNAL", "INCREASE", claim_id="cost-up")],
+        stage="growth",
+        assumption_ids=("OPERATING_MARGIN", "WACC"),
+    )
+
+    by_assumption = {pull.assumption_id: pull for pull in pulls}
+
+    assert by_assumption["OPERATING_MARGIN"].pull < 0.0
+    assert by_assumption["WACC"].pull > 0.0
+
+
+def test_type1_claim_bridge_omits_bridge_only_capital_structure_claims() -> None:
+    pulls = build_type1_claim_assumption_pulls(
+        [
+            _claim(
+                "CAPITAL_STRUCTURE",
+                "INCREASE",
+                claim_id="lease-liability",
+                instrument_type="lease",
+            )
+        ],
+        stage="growth",
+    )
+
+    assert pulls == ()
+
+
+def test_type1_claim_bridge_deduplicates_to_strongest_economic_driver() -> None:
+    weaker = _claim(
+        "DEMAND_SIGNAL",
+        "INCREASE",
+        claim_id="weaker-revenue",
+        magnitude_qualifier="WEAK",
+        text="Revenue increased 10% year-over-year.",
+    )
+    stronger = _claim(
+        "DEMAND_SIGNAL",
+        "INCREASE",
+        claim_id="stronger-revenue",
+        magnitude_qualifier="EXTREME",
+        text="Revenue increased 10% year-over-year.",
+    )
+
+    pulls = build_type1_claim_assumption_pulls(
+        [weaker, stronger],
+        stage="growth",
+        assumption_ids=("REVENUE_CAGR",),
+    )
+
+    assert tuple(pull.claim_id for pull in pulls) == ("stronger-revenue",)
+
+
+def test_type1_claim_bridge_is_deterministic_and_feeds_type1_axis_generation() -> None:
+    claims = [
+        _claim(
+            "DEMAND_SIGNAL",
+            "INCREASE",
+            claim_id="demand-up-1",
+            magnitude_qualifier="EXTREME",
+        ),
+        _claim(
+            "DEMAND_SIGNAL",
+            "INCREASE",
+            claim_id="demand-up-2",
+            magnitude_qualifier="STRONG",
+            text="Sales backlog increased across data center products.",
+        ),
+        _claim(
+            "DEMAND_SIGNAL",
+            "DECREASE",
+            claim_id="demand-down-1",
+            magnitude_qualifier="EXTREME",
+        ),
+        _claim(
+            "DEMAND_SIGNAL",
+            "DECREASE",
+            claim_id="demand-down-2",
+            magnitude_qualifier="STRONG",
+            text="Sales backlog declined across data center products.",
+        ),
+    ]
+
+    first = build_type1_claim_assumption_pulls(
+        claims,
+        stage="growth",
+        assumption_ids=("REVENUE_CAGR", "OPERATING_MARGIN"),
+    )
+    second = build_type1_claim_assumption_pulls(
+        claims,
+        stage="growth",
+        assumption_ids=("REVENUE_CAGR", "OPERATING_MARGIN"),
+    )
+    axes = generate_type1_tension_axes(first, contested_mass_threshold=0.01)
+
+    assert first == second
+    assert len(axes) == 1
+    assert axes[0].loadings["REVENUE_CAGR"] > 0.0
+    assert axes[0].loadings["OPERATING_MARGIN"] > 0.0
 
 
 def test_generate_narrative_axes_rejects_empty_claim_assumption_pulls() -> None:
@@ -772,6 +892,39 @@ def test_rejects_zero_or_negative_type1_candidate_shift_strength(
             assumptions=(_assumption("REVENUE_CAGR", 0.10),),
             shift_strength=bad_shift_strength,
         )
+
+
+def _claim(
+    subject: ClaimSubject,
+    direction: ClaimDirection,
+    *,
+    claim_id: str,
+    magnitude_qualifier: str = "STRONG",
+    text: str = "NVDA narrative claim.",
+    instrument_type: str | None = None,
+) -> Claim:
+    return Claim(
+        claim_id=claim_id,
+        claim_text=text,
+        claim_subject=subject,
+        claim_nature="REALIZED",
+        direction=direction,
+        magnitude_qualifier=magnitude_qualifier,
+        instrument_type=instrument_type,
+        extraction_quality=ExtractionQuality(
+            verbatim_overlap=0.95,
+            numeric_consistency=True,
+            temporal_consistency=True,
+            entity_consistency=True,
+        ),
+        source_ref=SourceRef(
+            discovery_channel="rss_aggregator",
+            content_source="10-Q",
+            source_reliability=0.95,
+        ),
+        chunk_ref="chunk",
+        published_date=date(2026, 5, 22),
+    )
 
 
 def _assumption(
