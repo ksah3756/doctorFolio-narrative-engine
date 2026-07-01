@@ -452,6 +452,12 @@ def _selected_type1_assumption_ids(
     if duplicate_ids:
         ordered_duplicates = ", ".join(sorted(duplicate_ids))
         raise ValueError(f"duplicate assumption_ids: {ordered_duplicates}")
+    unknown_ids = {
+        assumption_id for assumption_id in assumption_ids if assumption_id not in LOADING
+    }
+    if unknown_ids:
+        ordered_unknown_ids = ", ".join(sorted(unknown_ids))
+        raise ValueError(f"unknown assumption_ids: {ordered_unknown_ids}")
     return tuple(assumption_ids)
 
 
