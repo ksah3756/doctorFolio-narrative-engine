@@ -41,7 +41,7 @@ def _chunk(*, doc_id: str = "nvda-doc", chunk_id: str = "nvda-doc-0001") -> Chun
     )
 
 
-def _claim(*, claim_id: str, chunk_id: str) -> Claim:
+def _claim(*, claim_id: str, chunk_id: str, verbatim_overlap: float = 0.9) -> Claim:
     return Claim(
         claim_id=claim_id,
         claim_text="Data center revenue increased as cloud demand expanded.",
@@ -50,7 +50,7 @@ def _claim(*, claim_id: str, chunk_id: str) -> Claim:
         direction="INCREASE",
         magnitude_qualifier="STRONG",
         extraction_quality=ExtractionQuality(
-            verbatim_overlap=0.9,
+            verbatim_overlap=verbatim_overlap,
             numeric_consistency=True,
             temporal_consistency=True,
             entity_consistency=True,
@@ -104,6 +104,43 @@ def test_save_claims_loads_typed_claims_in_deterministic_order(tmp_path: Path) -
 
     assert loaded == [first_claim, second_claim, later_chunk_claim]
     assert all(isinstance(claim, Claim) for claim in loaded)
+
+
+def test_low_overlap_claims_are_saved_to_quarantine_artifact(tmp_path: Path) -> None:
+    store = JsonClaimStore(tmp_path)
+    low_overlap_claim = _claim(
+        claim_id="claim-low-overlap",
+        chunk_id="nvda-doc-0001",
+        verbatim_overlap=0.79,
+    )
+
+    store.save_claims("nvda-doc-0001", [low_overlap_claim])
+
+    assert not (tmp_path / "nvda/claims/nvda-doc-0001.json").exists()
+    quarantine_path = tmp_path / "nvda/quarantined_claims/nvda-doc-0001.json"
+    assert quarantine_path.exists()
+    payload = json.loads(quarantine_path.read_text())
+    assert payload[0]["claim_id"] == "claim-low-overlap"
+    assert store.load_all_claims() == []
+    assert store.load_all_claims(include_quarantined=True) == [low_overlap_claim]
+
+
+def test_load_all_claims_can_include_quarantined_claims_for_audit(tmp_path: Path) -> None:
+    store = JsonClaimStore(tmp_path)
+    trusted_claim = _claim(claim_id="claim-trusted", chunk_id="nvda-doc-0001")
+    quarantined_claim = _claim(
+        claim_id="claim-quarantined",
+        chunk_id="nvda-doc-0001",
+        verbatim_overlap=0.1,
+    )
+
+    store.save_claims("nvda-doc-0001", [trusted_claim, quarantined_claim])
+
+    assert store.load_all_claims() == [trusted_claim]
+    assert store.load_all_claims(include_quarantined=True) == [
+        trusted_claim,
+        quarantined_claim,
+    ]
 
 
 def test_load_all_claims_defaults_to_instance_ticker(tmp_path: Path) -> None:
