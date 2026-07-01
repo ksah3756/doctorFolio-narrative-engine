@@ -258,51 +258,37 @@ def generate_type1_tension_axes(
 
 
 def generate_narrative_axes(
-    signatures: Sequence[PullSignature],
+    pulls: Sequence[ClaimAssumptionPull] | Sequence[PullSignature],
     *,
+    contested_mass_threshold: float = DEFAULT_CONTESTED_MASS_THRESHOLD,
     explained_variance_threshold: float = DEFAULT_EXPLAINED_VARIANCE_THRESHOLD,
+    stability_threshold: float = DEFAULT_AXIS_STABILITY_THRESHOLD,
     max_axes: int = DEFAULT_MAX_AXES,
 ) -> tuple[NarrativeAxis, ...]:
-    """Reduce finite Type-1 pull signatures into dominant assumption-space axes."""
+    """Generate v6.1 Type-1 axes from claim-assumption pulls."""
 
-    _validate_axis_controls(
+    return generate_type1_tension_axes(
+        _claim_assumption_pulls_for_public_entrypoint(pulls),
+        contested_mass_threshold=contested_mass_threshold,
         explained_variance_threshold=explained_variance_threshold,
+        stability_threshold=stability_threshold,
         max_axes=max_axes,
     )
-    ordered_signatures = _ordered_signatures(signatures)
-    matrix = _signature_matrix(ordered_signatures)
-    _validate_measurement_axis(ordered_signatures)
 
-    left_singular_vectors, singular_values, _ = np.linalg.svd(matrix, full_matrices=False)
-    variances = np.square(singular_values)
-    positive_variance_mask = variances > ZERO_VARIANCE_TOLERANCE
-    positive_variances = variances[positive_variance_mask]
-    if positive_variances.size == 0:
-        raise ValueError("signature matrix must contain non-zero pull variance")
 
-    total_variance = float(np.sum(positive_variances))
-    explained_variance_ratios = positive_variances / total_variance
-    axis_count = min(
-        _axis_count_for_threshold(explained_variance_ratios, explained_variance_threshold),
-        max_axes,
-    )
-
-    assumption_ids = tuple(signature.assumption_id for signature in ordered_signatures)
-    axes: list[NarrativeAxis] = []
-    positive_component_indexes = np.flatnonzero(positive_variance_mask)
-    for axis_index, component_index in enumerate(positive_component_indexes[:axis_count]):
-        loadings = _deterministic_loadings(
-            assumption_ids,
-            left_singular_vectors[:, component_index],
-        )
-        axes.append(
-            NarrativeAxis(
-                axis_index=axis_index,
-                explained_variance_ratio=float(explained_variance_ratios[axis_index]),
-                loadings=loadings,
+def _claim_assumption_pulls_for_public_entrypoint(
+    pulls: Sequence[ClaimAssumptionPull] | Sequence[PullSignature],
+) -> tuple[ClaimAssumptionPull, ...]:
+    claim_assumption_pulls: list[ClaimAssumptionPull] = []
+    for pull in pulls:
+        if isinstance(pull, PullSignature):
+            raise ValueError(
+                "generate_narrative_axes no longer accepts aggregated PullSignature "
+                "inputs; pass ClaimAssumptionPull rows or call "
+                "generate_type1_tension_axes"
             )
-        )
-    return tuple(axes)
+        claim_assumption_pulls.append(pull)
+    return tuple(claim_assumption_pulls)
 
 
 def _validate_axis_controls(
@@ -363,18 +349,6 @@ def _evidence_pull_array(evidence: EvidencePull) -> NDArray[np.float64]:
     return values
 
 
-def _ordered_signatures(signatures: Sequence[PullSignature]) -> tuple[PullSignature, ...]:
-    if not signatures:
-        raise ValueError("signatures must be non-empty")
-
-    assumption_ids = [signature.assumption_id for signature in signatures]
-    if any(not assumption_id for assumption_id in assumption_ids):
-        raise ValueError("assumption_id must be non-empty")
-    if len(set(assumption_ids)) != len(assumption_ids):
-        raise ValueError("assumption_id values must be unique")
-    return tuple(sorted(signatures, key=lambda signature: signature.assumption_id))
-
-
 def _ordered_claim_assumption_pulls(
     pulls: Sequence[ClaimAssumptionPull],
 ) -> tuple[ClaimAssumptionPull, ...]:
@@ -412,20 +386,6 @@ def _ordered_claim_assumption_pulls(
             raise ValueError("claim-assumption pull weights must be consistent per claim")
 
     return tuple(sorted(pulls, key=lambda pull: (pull.assumption_id, pull.claim_id)))
-
-
-def _signature_matrix(signatures: Sequence[PullSignature]) -> NDArray[np.float64]:
-    first_values = _signature_array(signatures[0])
-    expected_shape = first_values.shape
-    rows = [first_values]
-
-    for signature in signatures[1:]:
-        values = _signature_array(signature)
-        if values.shape != expected_shape:
-            raise ValueError("signature vectors must share the same shape")
-        rows.append(values)
-
-    return np.vstack(rows)
 
 
 def _centered_claim_assumption_matrix(
@@ -538,32 +498,6 @@ def _passes_axis_bipolar_mass_gate(
         positive_mass >= contested_mass_threshold
         and negative_mass >= contested_mass_threshold
     )
-
-
-def _signature_array(signature: PullSignature) -> NDArray[np.float64]:
-    values = np.asarray(signature.values, dtype=np.float64)
-    if values.ndim != 1 or values.size == 0:
-        raise ValueError("signature values must be a non-empty one-dimensional vector")
-    if not np.all(np.isfinite(values)):
-        raise ValueError("signature values must be finite")
-    return values
-
-
-def _validate_measurement_axis(signatures: Sequence[PullSignature]) -> None:
-    first_signature = signatures[0]
-    lifecycle_stage = first_signature.lifecycle_stage
-    tam_structure = first_signature.tam_structure
-
-    # Type-1 axes are parametric pulls within one measurement frame, not Type-2 selection.
-    for signature in signatures:
-        if (
-            signature.lifecycle_stage != lifecycle_stage
-            or signature.tam_structure != tam_structure
-        ):
-            raise ValueError(
-                "signatures must share one measurement axis "
-                "(same lifecycle_stage and tam_structure)"
-            )
 
 
 def _validate_type1_candidate_inputs(
