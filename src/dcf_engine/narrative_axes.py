@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
-from typing import Final
+from typing import Final, Literal
 
 import numpy as np
 from numpy.typing import NDArray
@@ -23,6 +23,11 @@ ZERO_VARIANCE_TOLERANCE: Final = 1e-12
 
 type PullVector = Sequence[float] | NDArray[np.float64]
 type TamStructure = Mapping[str, object]
+type Type1AxisRejectionReason = Literal[
+    "stability_below_threshold",
+    "stage_c_bipolar_mass_below_threshold",
+    "axis_budget_already_filled",
+]
 
 
 @dataclass(frozen=True)
@@ -72,6 +77,33 @@ class AssumptionMassGateResult:
     positive_mass: float
     negative_mass: float
     passes: bool
+
+
+@dataclass(frozen=True)
+class BipolarClaimMassGateResult:
+    positive_mass: float
+    negative_mass: float
+    passes: bool
+
+
+@dataclass(frozen=True)
+class Type1CandidateComponentDiagnostic:
+    component_index: int
+    explained_variance_ratio: float
+    cumulative_explained_variance_ratio: float
+    loadings: Mapping[str, float]
+    stability_score: float
+    stage_c_mass_gate: BipolarClaimMassGateResult
+    rejection_reason: Type1AxisRejectionReason | None
+    promoted_axis: NarrativeAxis | None
+
+
+@dataclass(frozen=True)
+class Type1TensionAxisDiagnostics:
+    assumption_mass_gates: tuple[AssumptionMassGateResult, ...]
+    pca_explained_variance_ratios: tuple[float, ...]
+    candidate_components: tuple[Type1CandidateComponentDiagnostic, ...]
+    promoted_axes: tuple[NarrativeAxis, ...]
 
 
 def build_pull_signature(contested: ContestedAssumptionPullInput) -> PullSignature:
@@ -182,6 +214,25 @@ def generate_type1_tension_axes(
 ) -> tuple[NarrativeAxis, ...]:
     """Generate v6.1 Type-1 axes from gated, centered claim-by-assumption pulls."""
 
+    return generate_type1_tension_axis_diagnostics(
+        pulls,
+        contested_mass_threshold=contested_mass_threshold,
+        explained_variance_threshold=explained_variance_threshold,
+        stability_threshold=stability_threshold,
+        max_axes=max_axes,
+    ).promoted_axes
+
+
+def generate_type1_tension_axis_diagnostics(
+    pulls: Sequence[ClaimAssumptionPull],
+    *,
+    contested_mass_threshold: float = DEFAULT_CONTESTED_MASS_THRESHOLD,
+    explained_variance_threshold: float = DEFAULT_EXPLAINED_VARIANCE_THRESHOLD,
+    stability_threshold: float = DEFAULT_AXIS_STABILITY_THRESHOLD,
+    max_axes: int = DEFAULT_MAX_AXES,
+) -> Type1TensionAxisDiagnostics:
+    """Report every deterministic gate used to promote or reject Type-1 axes."""
+
     _validate_axis_controls(
         explained_variance_threshold=explained_variance_threshold,
         max_axes=max_axes,
@@ -197,14 +248,24 @@ def generate_type1_tension_axes(
         result.assumption_id for result in gate_results if result.passes
     )
     if not retained_assumption_ids:
-        return ()
+        return Type1TensionAxisDiagnostics(
+            assumption_mass_gates=gate_results,
+            pca_explained_variance_ratios=(),
+            candidate_components=(),
+            promoted_axes=(),
+        )
 
     matrix, claim_ids, assumption_ids = _centered_claim_assumption_matrix(
         ordered_pulls,
         retained_assumption_ids,
     )
     if matrix.size == 0:
-        return ()
+        return Type1TensionAxisDiagnostics(
+            assumption_mass_gates=gate_results,
+            pca_explained_variance_ratios=(),
+            candidate_components=(),
+            promoted_axes=(),
+        )
 
     _, singular_values, right_singular_vectors = np.linalg.svd(
         matrix,
@@ -214,10 +275,18 @@ def generate_type1_tension_axes(
     positive_variance_mask = variances > ZERO_VARIANCE_TOLERANCE
     positive_variances = variances[positive_variance_mask]
     if positive_variances.size == 0:
-        return ()
+        return Type1TensionAxisDiagnostics(
+            assumption_mass_gates=gate_results,
+            pca_explained_variance_ratios=(),
+            candidate_components=(),
+            promoted_axes=(),
+        )
 
     total_variance = float(np.sum(positive_variances))
     explained_variance_ratios = positive_variances / total_variance
+    explained_variance_ratio_tuple = tuple(
+        float(ratio) for ratio in explained_variance_ratios
+    )
     candidate_axis_count = min(
         _axis_count_for_threshold(explained_variance_ratios, explained_variance_threshold),
         max_axes,
@@ -225,6 +294,8 @@ def generate_type1_tension_axes(
     claim_weights = _claim_weights_by_id(ordered_pulls)
 
     axes: list[NarrativeAxis] = []
+    candidate_components: list[Type1CandidateComponentDiagnostic] = []
+    cumulative_explained_variance_ratios = np.cumsum(explained_variance_ratios)
     positive_component_indexes = np.flatnonzero(positive_variance_mask)
     for variance_index, component_index in enumerate(positive_component_indexes):
         loadings = _deterministic_loadings(
@@ -235,26 +306,51 @@ def generate_type1_tension_axes(
             [loadings[assumption_id] for assumption_id in assumption_ids],
             dtype=np.float64,
         )
-        if _axis_stability_score(matrix, loading_vector) < stability_threshold:
-            continue
+        stability_score = _axis_stability_score(matrix, loading_vector)
         scores = matrix @ loading_vector
-        if not _passes_axis_bipolar_mass_gate(
+        stage_c_mass_gate = _axis_bipolar_claim_mass_gate_result(
             claim_ids=claim_ids,
             claim_weights=claim_weights,
             scores=scores,
             contested_mass_threshold=contested_mass_threshold,
-        ):
-            continue
-        axes.append(
-            NarrativeAxis(
+        )
+        rejection_reason: Type1AxisRejectionReason | None = None
+        promoted_axis: NarrativeAxis | None = None
+        if len(axes) >= candidate_axis_count:
+            rejection_reason = "axis_budget_already_filled"
+        elif stability_score < stability_threshold:
+            rejection_reason = "stability_below_threshold"
+        elif not stage_c_mass_gate.passes:
+            rejection_reason = "stage_c_bipolar_mass_below_threshold"
+        else:
+            promoted_axis = NarrativeAxis(
                 axis_index=len(axes),
                 explained_variance_ratio=float(explained_variance_ratios[variance_index]),
                 loadings=loadings,
             )
+            axes.append(promoted_axis)
+
+        candidate_components.append(
+            Type1CandidateComponentDiagnostic(
+                component_index=int(component_index),
+                explained_variance_ratio=float(explained_variance_ratios[variance_index]),
+                cumulative_explained_variance_ratio=float(
+                    cumulative_explained_variance_ratios[variance_index]
+                ),
+                loadings=loadings,
+                stability_score=stability_score,
+                stage_c_mass_gate=stage_c_mass_gate,
+                rejection_reason=rejection_reason,
+                promoted_axis=promoted_axis,
+            )
         )
-        if len(axes) >= candidate_axis_count:
-            break
-    return tuple(axes)
+
+    return Type1TensionAxisDiagnostics(
+        assumption_mass_gates=gate_results,
+        pca_explained_variance_ratios=explained_variance_ratio_tuple,
+        candidate_components=tuple(candidate_components),
+        promoted_axes=tuple(axes),
+    )
 
 
 def generate_narrative_axes(
@@ -487,6 +583,21 @@ def _passes_axis_bipolar_mass_gate(
     scores: NDArray[np.float64],
     contested_mass_threshold: float,
 ) -> bool:
+    return _axis_bipolar_claim_mass_gate_result(
+        claim_ids=claim_ids,
+        claim_weights=claim_weights,
+        scores=scores,
+        contested_mass_threshold=contested_mass_threshold,
+    ).passes
+
+
+def _axis_bipolar_claim_mass_gate_result(
+    *,
+    claim_ids: Sequence[str],
+    claim_weights: Mapping[str, float],
+    scores: NDArray[np.float64],
+    contested_mass_threshold: float,
+) -> BipolarClaimMassGateResult:
     positive_mass = 0.0
     negative_mass = 0.0
     for claim_id, score in zip(claim_ids, scores, strict=True):
@@ -494,9 +605,13 @@ def _passes_axis_bipolar_mass_gate(
             positive_mass += claim_weights[claim_id]
         elif score < -ZERO_VARIANCE_TOLERANCE:
             negative_mass += claim_weights[claim_id]
-    return (
-        positive_mass >= contested_mass_threshold
-        and negative_mass >= contested_mass_threshold
+    return BipolarClaimMassGateResult(
+        positive_mass=positive_mass,
+        negative_mass=negative_mass,
+        passes=(
+            positive_mass >= contested_mass_threshold
+            and negative_mass >= contested_mass_threshold
+        ),
     )
 
 

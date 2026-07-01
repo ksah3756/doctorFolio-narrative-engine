@@ -18,8 +18,8 @@ from dcf_engine.narrative_axes import (
     evaluate_type1_assumption_mass_gates,
     generate_narrative_axes,
     generate_type1_narrative_candidates,
-    generate_type1_tension_axis_diagnostics,
     generate_type1_tension_axes,
+    generate_type1_tension_axis_diagnostics,
 )
 
 
