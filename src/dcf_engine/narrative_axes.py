@@ -11,6 +11,7 @@ from numpy.typing import NDArray
 
 from dcf_engine.assumption import AssumptionState
 from dcf_engine.claim import Claim
+from dcf_engine.extraction.calibration import CalibrationResult
 from dcf_engine.lifecycle import LifecycleStage
 from dcf_engine.loading import LOADING
 from dcf_engine.narrative import Narrative, NarrativeContainer
@@ -107,6 +108,23 @@ class Type1TensionAxisDiagnostics:
     pca_explained_variance_ratios: tuple[float, ...]
     candidate_components: tuple[Type1CandidateComponentDiagnostic, ...]
     promoted_axes: tuple[NarrativeAxis, ...]
+
+
+@dataclass(frozen=True)
+class Type1ExtractionCalibrationAudit:
+    passed: bool
+    threshold: float
+    overall_agreement_rate: float
+    valid_repeat_count: int
+    invalid_repeat_count: int
+    unstable_group_identifiers: tuple[tuple[str, str], ...]
+
+
+@dataclass(frozen=True)
+class CalibratedType1TensionAxisResult:
+    axes: tuple[NarrativeAxis, ...]
+    calibration_audit: Type1ExtractionCalibrationAudit
+    blocked_by_calibration: bool
 
 
 def build_pull_signature(contested: ContestedAssumptionPullInput) -> PullSignature:
@@ -224,6 +242,38 @@ def generate_type1_tension_axes(
         stability_threshold=stability_threshold,
         max_axes=max_axes,
     ).promoted_axes
+
+
+def generate_type1_tension_axes_with_calibration(
+    pulls: Sequence[ClaimAssumptionPull],
+    *,
+    calibration_result: CalibrationResult | None,
+    contested_mass_threshold: float = DEFAULT_CONTESTED_MASS_THRESHOLD,
+    explained_variance_threshold: float = DEFAULT_EXPLAINED_VARIANCE_THRESHOLD,
+    stability_threshold: float = DEFAULT_AXIS_STABILITY_THRESHOLD,
+    max_axes: int = DEFAULT_MAX_AXES,
+) -> CalibratedType1TensionAxisResult:
+    """Gate Type-1 promotion on extraction replay calibration."""
+
+    calibration_audit = _type1_extraction_calibration_audit(calibration_result)
+    if not calibration_audit.passed:
+        return CalibratedType1TensionAxisResult(
+            axes=(),
+            calibration_audit=calibration_audit,
+            blocked_by_calibration=True,
+        )
+
+    return CalibratedType1TensionAxisResult(
+        axes=generate_type1_tension_axes(
+            pulls,
+            contested_mass_threshold=contested_mass_threshold,
+            explained_variance_threshold=explained_variance_threshold,
+            stability_threshold=stability_threshold,
+            max_axes=max_axes,
+        ),
+        calibration_audit=calibration_audit,
+        blocked_by_calibration=False,
+    )
 
 
 def generate_type1_tension_axis_diagnostics(
@@ -496,6 +546,51 @@ def _validate_contested_mass_threshold(contested_mass_threshold: float) -> None:
 def _validate_stability_threshold(stability_threshold: float) -> None:
     if not np.isfinite(stability_threshold) or not (0.0 <= stability_threshold <= 1.0):
         raise ValueError("stability_threshold must be finite and in [0, 1]")
+
+
+def _type1_extraction_calibration_audit(
+    calibration_result: CalibrationResult | None,
+) -> Type1ExtractionCalibrationAudit:
+    if calibration_result is None:
+        raise ValueError("calibration_result is required for calibrated Type-1 promotion")
+    _validate_type1_calibration_result(calibration_result)
+    return Type1ExtractionCalibrationAudit(
+        passed=calibration_result.passed,
+        threshold=calibration_result.threshold,
+        overall_agreement_rate=calibration_result.agreement_rate,
+        valid_repeat_count=calibration_result.valid_repeat_count,
+        invalid_repeat_count=calibration_result.invalid_repeat_count,
+        unstable_group_identifiers=tuple(
+            sorted(
+                (group.chunk_id, group.claim_group)
+                for group in calibration_result.unstable_groups
+            )
+        ),
+    )
+
+
+def _validate_type1_calibration_result(calibration_result: CalibrationResult) -> None:
+    if calibration_result.valid_repeat_count < 2:
+        raise ValueError(
+            "calibrated Type-1 promotion requires at least two "
+            "schema-valid calibration repeats"
+        )
+    if calibration_result.invalid_repeat_count < 0:
+        raise ValueError("calibration invalid_repeat_count must be non-negative")
+    if not np.isfinite(calibration_result.threshold) or not (
+        0.0 <= calibration_result.threshold <= 1.0
+    ):
+        raise ValueError("calibration threshold must be finite and in [0, 1]")
+    if not np.isfinite(calibration_result.agreement_rate) or not (
+        0.0 <= calibration_result.agreement_rate <= 1.0
+    ):
+        raise ValueError("calibration agreement_rate must be finite and in [0, 1]")
+    if calibration_result.passed and calibration_result.unstable_groups:
+        raise ValueError("passing calibration cannot contain unstable groups")
+    if calibration_result.passed and (
+        calibration_result.agreement_rate < calibration_result.threshold
+    ):
+        raise ValueError("passing calibration agreement_rate must meet threshold")
 
 
 def _signed_evidence_items(
