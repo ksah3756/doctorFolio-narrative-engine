@@ -65,7 +65,7 @@ def build_type1_fact_explanations(
     rows: list[Type1FactExplanationPair] = []
 
     for axis in sorted(axes, key=lambda item: item.axis_index):
-        for assumption_id in sorted(axis.loadings):
+        for assumption_id in _material_axis_assumption_ids(axis):
             groups = _evidence_groups_for_assumption(
                 assumption_id=assumption_id,
                 claims_by_id=claims_by_id,
@@ -106,6 +106,16 @@ def build_type1_fact_explanations(
                         )
 
     return tuple(rows)
+
+
+def _material_axis_assumption_ids(axis: NarrativeAxis) -> tuple[str, ...]:
+    assumption_ids: list[str] = []
+    for assumption_id, loading in axis.loadings.items():
+        if not isfinite(loading):
+            raise ValueError("axis loadings must be finite")
+        if abs(loading) > EXPLANATION_PULL_TOLERANCE:
+            assumption_ids.append(assumption_id)
+    return tuple(sorted(assumption_ids))
 
 
 def _claims_by_id(claims: Sequence[Claim]) -> dict[str, Claim]:
