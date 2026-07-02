@@ -189,6 +189,28 @@ def test_explanation_records_preserve_deterministic_ordering_and_provenance() ->
     assert row.assumption_id == "REVENUE_CAGR"
 
 
+@pytest.mark.parametrize("bad_pull", [float("nan"), float("inf"), float("-inf")])
+def test_explanation_rejects_non_finite_claim_assumption_pulls(bad_pull: float) -> None:
+    axis = NarrativeAxis(
+        axis_index=0,
+        explained_variance_ratio=1.0,
+        loadings={"REVENUE_CAGR": 1.0},
+    )
+
+    with pytest.raises(ValueError, match="finite"):
+        build_type1_fact_explanations(
+            claims=(_claim("bad", text="Data center revenue increased 217%."),),
+            pulls=(
+                ClaimAssumptionPull(
+                    claim_id="bad",
+                    assumption_id="REVENUE_CAGR",
+                    pull=bad_pull,
+                ),
+            ),
+            axes=(axis,),
+        )
+
+
 def test_multi_loading_axis_explanations_ignore_unrelated_assumptions() -> None:
     claims = (
         _claim("bull", text="Data center revenue increased 217%."),
