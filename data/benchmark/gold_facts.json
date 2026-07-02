@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "label_status": "draft_pending_user_freeze",
+  "label_status": "frozen",
   "source_filing": {
     "company": "NVIDIA CORP",
     "form": "10-Q",
@@ -474,7 +474,7 @@
         "evidence_span": "Interest expense was $102 million compared with $63 million",
         "allowed_subjects": ["MACRO_EXPOSURE", "COST_SIGNAL"],
         "direction": "INCREASE",
-        "magnitude_qualifier": "MODERATE",
+        "magnitude_qualifier": "STRONG",
         "magnitude_basis": "qualitative",
         "acceptable_natures": ["REALIZED"],
         "period": {"current": "Q1 FY2027", "prior": "Q1 FY2026"},
