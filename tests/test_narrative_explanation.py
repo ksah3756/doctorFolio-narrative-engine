@@ -239,6 +239,42 @@ def test_multi_loading_axis_explanations_ignore_unrelated_assumptions() -> None:
     assert {row.assumption_id for row in explanations} == set(axis.loadings)
 
 
+def test_generated_orthogonal_axes_explain_only_material_loading_assumptions() -> None:
+    claims = (
+        _claim("c1", text="The same fact is interpreted in opposing ways."),
+        _claim("c2", text="The same fact is interpreted in opposing ways."),
+        _claim("c3", text="The same fact is interpreted in opposing ways."),
+        _claim("c4", text="The same fact is interpreted in opposing ways."),
+    )
+    pulls = (
+        ClaimAssumptionPull(claim_id="c1", assumption_id="growth", pull=2.0),
+        ClaimAssumptionPull(claim_id="c1", assumption_id="margin", pull=1.0),
+        ClaimAssumptionPull(claim_id="c2", assumption_id="growth", pull=2.0),
+        ClaimAssumptionPull(claim_id="c2", assumption_id="margin", pull=-1.0),
+        ClaimAssumptionPull(claim_id="c3", assumption_id="growth", pull=-2.0),
+        ClaimAssumptionPull(claim_id="c3", assumption_id="margin", pull=1.0),
+        ClaimAssumptionPull(claim_id="c4", assumption_id="growth", pull=-2.0),
+        ClaimAssumptionPull(claim_id="c4", assumption_id="margin", pull=-1.0),
+    )
+    axes = generate_type1_tension_axes(
+        pulls,
+        contested_mass_threshold=1.0,
+        explained_variance_threshold=1.0,
+        stability_threshold=0.0,
+        max_axes=2,
+    )
+
+    assert axes[0].loadings == pytest.approx({"growth": 1.0, "margin": 0.0})
+    assert axes[1].loadings == pytest.approx({"growth": 0.0, "margin": 1.0})
+
+    explanations = build_type1_fact_explanations(claims=claims, pulls=pulls, axes=axes)
+
+    assert {(row.axis_index, row.assumption_id) for row in explanations} == {
+        (0, "growth"),
+        (1, "margin"),
+    }
+
+
 def _claim(
     claim_id: str,
     *,
