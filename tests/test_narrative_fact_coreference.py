@@ -1,6 +1,7 @@
 import pytest
 
 from dcf_engine.narrative_fact_coreference import (
+    FactCoreferenceClaimKind,
     FactCoreferenceEvidence,
     FactCoreferenceFactKey,
     build_fact_coreference_explanations,
@@ -91,13 +92,38 @@ def test_keeps_different_metric_period_source_or_span_in_separate_groups() -> No
     )
 
     assert len(explanations) == 5
-    assert [row.fact_key.metric_id for row in explanations] == [
-        "data_center_revenue_growth",
-        "data_center_revenue_growth",
-        "data_center_revenue_growth",
-        "data_center_revenue_growth",
-        "total_revenue_growth",
-    ]
+    assert {row.fact_key for row in explanations} == {
+        FactCoreferenceFactKey(
+            source_id="FY2024-10K",
+            evidence_span="Data center revenue increased 217% year over year.",
+            metric_id="data_center_revenue_growth",
+            period="FY2024",
+        ),
+        FactCoreferenceFactKey(
+            source_id="FY2024-10K",
+            evidence_span="Data center revenue increased 217% year over year.",
+            metric_id="data_center_revenue_growth",
+            period="Q1-FY2025",
+        ),
+        FactCoreferenceFactKey(
+            source_id="FY2024-10K",
+            evidence_span="Data center revenue increased 217% year over year.",
+            metric_id="total_revenue_growth",
+            period="FY2024",
+        ),
+        FactCoreferenceFactKey(
+            source_id="FY2024-10K",
+            evidence_span="Revenue grew 18% year over year.",
+            metric_id="data_center_revenue_growth",
+            period="FY2024",
+        ),
+        FactCoreferenceFactKey(
+            source_id="Q1-FY2025-10Q",
+            evidence_span="Data center revenue increased 217% year over year.",
+            metric_id="data_center_revenue_growth",
+            period="FY2024",
+        ),
+    }
     assert len({row.group_id for row in explanations}) == 5
 
 
@@ -170,7 +196,7 @@ def test_rejects_empty_inputs_and_duplicate_claim_ids() -> None:
 def _evidence(
     claim_id: str,
     *,
-    claim_kind: str = "INTERPRETATION",
+    claim_kind: FactCoreferenceClaimKind = "INTERPRETATION",
     source_id: str = "FY2024-10K",
     evidence_span: str = "Data center revenue increased 217% year over year.",
     metric_id: str = "data_center_revenue_growth",
