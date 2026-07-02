@@ -6,6 +6,7 @@ from collections import defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date
+from math import isfinite
 from typing import Final
 
 from dcf_engine.claim import Claim, SourceRef
@@ -121,6 +122,8 @@ def _pulls_by_cell(
 ) -> dict[tuple[str, str], ClaimAssumptionPull]:
     pull_by_cell: dict[tuple[str, str], ClaimAssumptionPull] = {}
     for pull in pulls:
+        if not isfinite(pull.pull):
+            raise ValueError("claim-assumption pull values must be finite")
         cell = (pull.claim_id, pull.assumption_id)
         if cell in pull_by_cell:
             raise ValueError("claim-assumption pulls must be unique per claim and assumption")
